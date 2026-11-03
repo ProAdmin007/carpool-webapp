@@ -122,6 +122,16 @@ docker compose exec -u root carpool chown carpool /data/carpool.sqlite3
 docker compose restart
 ```
 
+**Wachtwoord kwijt?**
+
+Een collega kan de beheerder een nieuw wachtwoord geven via **Instellingen → Wachtwoord vergeten?**. Is de beheerder zelf zijn wachtwoord kwijt, draai dan op de Docker-host:
+
+```bash
+docker exec carpool python reset_wachtwoord.py NAAM
+```
+
+Het script toont een tijdelijk wachtwoord. Bij de volgende login kies je zelf een nieuw wachtwoord.
+
 **Back-up maken**
 
 ```bash

@@ -17,7 +17,7 @@ WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-COPY app.py start.py importeer_agenda.py ./
+COPY app.py start.py importeer_agenda.py reset_wachtwoord.py ./
 COPY templates templates
 COPY static static
 
