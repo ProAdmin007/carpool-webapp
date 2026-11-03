@@ -41,9 +41,9 @@ cd carpool-webapp
 docker compose up -d --build
 ```
 
-- De app luistert op `127.0.0.1:5000` van de server. Je reverse proxy stuurt het https-verkeer daarnaartoe.
+- De app luistert op poort `5000` van de server. Je reverse proxy stuurt het https-verkeer daarnaartoe. Draait de proxy op dezelfde machine, dan kun je de poort afschermen voor de rest van het netwerk met `CARPOOL_BIND=127.0.0.1:5000`.
 - Database en geheime sleutel staan in het Docker-volume `carpool-data` (`/data` in de container). Ze blijven bewaard bij updates en herstarts.
-- Inloggen werkt alleen via **https**, omdat `COOKIE_SECURE=1` staat. Wil je eerst zonder proxy testen, zet dan in `docker-compose.yml` `COOKIE_SECURE` op `"0"` en de poort op `"5000:5000"`.
+- Inloggen werkt alleen via **https**, omdat `COOKIE_SECURE=1` staat. Wil je eerst zonder proxy testen via `http://<server-ip>:5000`, zet dan `COOKIE_SECURE=0`.
 - De container gebruikt Nederlandse tijd (`TZ=Europe/Amsterdam`), dus "vandaag" wisselt om middernacht.
 
 ### Deployen met Dockhand (makkelijkst)
@@ -73,7 +73,7 @@ Met [Dockhand](https://github.com/Finsys/dockhand) haal je de app rechtstreeks u
 
 | Variabele | Standaard | Wanneer aanpassen |
 |---|---|---|
-| `CARPOOL_BIND` | `127.0.0.1:5000` | Draait je reverse proxy op een andere machine of in een eigen container? Gebruik dan `5000`, of een vrije poort zoals `8085`. |
+| `CARPOOL_BIND` | `5000` | Andere poort nodig? Gebruik bijvoorbeeld `8085`. Draait de proxy op dezelfde machine en wil je de app niet direct bereikbaar maken in het netwerk, gebruik dan `127.0.0.1:5000`. |
 | `COOKIE_SECURE` | `1` | Zet tijdelijk op `0` om zonder https te testen. Anders kun je niet inloggen. |
 | `TRUST_PROXY` | `1` | Alleen op `0` zetten als er geen reverse proxy voor de app staat. |
 
@@ -112,7 +112,7 @@ location / {
 }
 ```
 
-Draait je proxy zelf ook in Docker (bijvoorbeeld Traefik of Nginx Proxy Manager)? Zet beide containers dan in hetzelfde Docker-netwerk, laat de proxy naar `carpool:5000` wijzen en haal het `ports:`-blok weg.
+Draait je proxy zelf ook in Docker (bijvoorbeeld Traefik of Nginx Proxy Manager)? Laat de proxy dan naar `<server-ip>:5000` wijzen. Of zet beide containers in hetzelfde Docker-netwerk en laat de proxy naar `carpool:5000` wijzen.
 
 **Bestaande database meenemen**
 

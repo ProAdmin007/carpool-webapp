@@ -11,9 +11,9 @@ services:
     volumes:
       - carpool-data:/data # database + geheime sleutel; blijft bewaard bij updates
     ports:
-      # Standaard alleen bereikbaar vanaf de server zelf; de reverse proxy stuurt het verkeer door.
-      # Draait je proxy in een andere container of op een andere machine, zet CARPOOL_BIND dan op bijv. 5000.
-      - "${CARPOOL_BIND:-127.0.0.1:5000}:5000"
+      # Standaard bereikbaar op poort 5000 van de server (alle netwerkkaarten).
+      # Alleen bereikbaar maken vanaf de server zelf (proxy op dezelfde machine)? Zet CARPOOL_BIND=127.0.0.1:5000.
+      - "${CARPOOL_BIND:-5000}:5000"
 
 volumes:
   carpool-data:
