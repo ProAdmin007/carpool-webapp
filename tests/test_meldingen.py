@@ -121,6 +121,7 @@ def test_volgende_rit_bovenaan():
     top = page[page.index('next-ride'):page.index('class="toolbar"')]
     assert 'Anna rijdt' in top and 'Mee: Bas, Chris' in top
     assert 'Daarna' in top and 'Je gaat' in top          # korte agenda met eigen status
+    assert top.count('Jij rijdt') <= 1 or 'pill drive' not in top, 'geen dubbel Jij rijdt'
     r = post(c, f'/attendance/{second}', going='0', **{'from': 'top'})
     assert r.location.endswith('/'), 'knop bovenaan springt niet naar beneden'
 

@@ -41,8 +41,9 @@
 {% endif %}
 
 {% macro my_status(day) %}
+  {#- Jouw eigen status; als jij rijdt staat dat al bij de chauffeur, dan geen label. -#}
   {%- set r = day.responses.get(me.id) -%}
-  {%- if day.driver == me.id %}<span class="pill drive">Jij rijdt</span>
+  {%- if day.driver == me.id %}<span></span>
   {%- elif r == 1 %}<span class="pill yes">✓ Je gaat</span>
   {%- elif r == 0 %}<span class="pill no">Niet</span>
   {%- else %}<span class="pill ask">Invullen</span>{% endif -%}
@@ -87,7 +88,7 @@
   {% for d in coming %}
     <li><a href="{{ url_for('index', week=week_of(d.date)) }}#day-{{ d.iso }}">
       <span class="ag-date">{{ weekdays[d.date.weekday()][:2] }} {{ short(d.date) }}</span>
-      <span class="ag-driver">{% if d.driver %}🚗 {{ 'Jij' if d.driver == me.id else names[d.driver] }}{% else %}<span class="muted">nog niemand</span>{% endif %}</span>
+      <span class="ag-driver">{% if d.driver == me.id %}<strong class="ag-me">Jij rijdt</strong>{% elif d.driver %}{{ names[d.driver] }} rijdt{% else %}<span class="muted">nog niemand</span>{% endif %}</span>
       {{ my_status(d) }}
     </a></li>
   {% endfor %}
