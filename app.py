@@ -1,0 +1,593 @@
+"""Kleine carpoolplanner voor een vertrouwde groep collega's."""
+import os
+import secrets
+import sqlite3
+from collections import defaultdict
+from datetime import date, datetime, timedelta
+from functools import wraps
+from pathlib import Path
+
+from flask import Flask, abort, flash, g, redirect, render_template, request, session, url_for
+from werkzeug.security import check_password_hash, generate_password_hash
+
+ROOT = Path(__file__).resolve().parent
+DB_PATH = Path(os.environ.get('CARPOOL_DB', str(ROOT / 'carpool.sqlite3')))
+app = Flask(__name__)
+
+
+def load_secret_key():
+    """Vaste sleutel, zodat iedereen ook na een herstart ingelogd blijft."""
+    if os.environ.get('SECRET_KEY'):
+        return os.environ['SECRET_KEY']
+    key_file = Path(os.environ.get('SECRET_KEY_FILE', str(ROOT / 'secret_key.txt')))
+    if not key_file.exists():
+        key_file.write_text(secrets.token_hex(32), encoding='utf-8')
+    return key_file.read_text(encoding='utf-8').strip()
+
+
+app.config.update(
+    SECRET_KEY=load_secret_key(),
+    SESSION_COOKIE_HTTPONLY=True,
+    SESSION_COOKIE_SAMESITE='Lax',
+    SESSION_COOKIE_SECURE=os.environ.get('COOKIE_SECURE', '0') == '1',
+    # Praktisch 'voor altijd' ingelogd; de cookie wordt bij elk bezoek weer verlengd.
+    PERMANENT_SESSION_LIFETIME=timedelta(days=3650),
+    SESSION_REFRESH_EACH_REQUEST=True,
+    MAX_CONTENT_LENGTH=16 * 1024,
+)
+WEEKDAYS = ['Maandag', 'Dinsdag', 'Woensdag', 'Donderdag', 'Vrijdag', 'Zaterdag', 'Zondag']
+MONTHS = ['', 'januari', 'februari', 'maart', 'april', 'mei', 'juni', 'juli', 'augustus', 'september', 'oktober', 'november', 'december']
+
+
+def db():
+    if 'db' not in g:
+        DB_PATH.parent.mkdir(parents=True, exist_ok=True)
+        g.db = sqlite3.connect(DB_PATH)
+        g.db.row_factory = sqlite3.Row
+        g.db.execute('PRAGMA foreign_keys=ON')
+        g.db.execute('PRAGMA journal_mode=WAL')
+    return g.db
+
+
+@app.teardown_appcontext
+def close_db(_):
+    conn = g.pop('db', None)
+    if conn is not None:
+        conn.close()
+
+
+def init_db():
+    db().executescript('''
+        CREATE TABLE IF NOT EXISTS users (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          name TEXT NOT NULL UNIQUE,
+          password_hash TEXT NOT NULL,
+          is_admin INTEGER NOT NULL DEFAULT 0,
+          must_change_password INTEGER NOT NULL DEFAULT 0
+        );
+        CREATE TABLE IF NOT EXISTS attendance (
+          user_id INTEGER NOT NULL REFERENCES users(id),
+          ride_date TEXT NOT NULL,
+          going INTEGER NOT NULL CHECK(going IN (0,1)),
+          PRIMARY KEY (user_id, ride_date)
+        );
+        CREATE TABLE IF NOT EXISTS rides (
+          ride_date TEXT PRIMARY KEY,
+          driver_id INTEGER NOT NULL REFERENCES users(id),
+          confirmed_at TEXT NOT NULL
+        );
+        CREATE TABLE IF NOT EXISTS ride_passengers (
+          ride_date TEXT NOT NULL REFERENCES rides(ride_date) ON DELETE CASCADE,
+          user_id INTEGER NOT NULL REFERENCES users(id),
+          PRIMARY KEY (ride_date, user_id)
+        );
+        CREATE TABLE IF NOT EXISTS seen_plan (
+          user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+          ride_date TEXT NOT NULL,
+          driver_id INTEGER,
+          shown_at TEXT,
+          PRIMARY KEY (user_id, ride_date)
+        );
+        CREATE TABLE IF NOT EXISTS settings (
+          key TEXT PRIMARY KEY,
+          value TEXT NOT NULL
+        );
+        INSERT OR IGNORE INTO settings(key, value) VALUES ('weekdays', '0,3');
+    ''')
+    cols = {r['name'] for r in db().execute('PRAGMA table_info(seen_plan)')}
+    if 'shown_at' not in cols:  # bestaande database bijwerken
+        db().execute('ALTER TABLE seen_plan ADD COLUMN shown_at TEXT')
+    db().commit()
+
+
+@app.before_request
+def before():
+    init_db()
+    g.user = None
+    if session.get('user_id'):
+        g.user = db().execute('SELECT * FROM users WHERE id=?', (session['user_id'],)).fetchone()
+        if not g.user:
+            session.clear()
+        else:
+            session.permanent = True
+    if request.method == 'POST':
+        if not session.get('csrf') or not secrets.compare_digest(request.form.get('csrf', ''), session['csrf']):
+            # Meestal een oud tabblad of een pagina die lang open stond: gewoon opnieuw laten proberen.
+            flash('Deze pagina was verouderd. Probeer het opnieuw.', 'error')
+            return redirect(url_for('index') if g.user else url_for('login'))
+    if g.user and g.user['must_change_password'] and request.endpoint not in ('change_password', 'logout', 'static'):
+        return redirect(url_for('change_password'))
+
+
+@app.context_processor
+def shared():
+    if 'csrf' not in session:
+        session['csrf'] = secrets.token_urlsafe(32)
+    return {'csrf': session['csrf'], 'me': g.get('user'), 'weekdays': WEEKDAYS}
+
+
+def login_required(fn):
+    @wraps(fn)
+    def inner(*args, **kwargs):
+        if not g.user:
+            return redirect(url_for('login'))
+        return fn(*args, **kwargs)
+    return inner
+
+
+def admin_required(fn):
+    @wraps(fn)
+    @login_required
+    def inner(*args, **kwargs):
+        if not g.user['is_admin']:
+            abort(403)
+        return fn(*args, **kwargs)
+    return inner
+
+
+def all_users():
+    return db().execute('SELECT id, name FROM users ORDER BY id').fetchall()
+
+
+def count_from():
+    """Ritten vóór deze datum tellen niet mee in het saldo (leeg = alles telt)."""
+    row = db().execute("SELECT value FROM settings WHERE key='count_from'").fetchone()
+    return row['value'] if row else ''
+
+
+def enabled_days():
+    row = db().execute("SELECT value FROM settings WHERE key='weekdays'").fetchone()
+    return set(int(x) for x in row['value'].split(','))
+
+
+def fmt(d):
+    return f'{WEEKDAYS[d.weekday()]} {d.day} {MONTHS[d.month]}'
+
+
+def monday(d):
+    return d - timedelta(days=d.weekday())
+
+
+def short(d):
+    return f'{d.day} {MONTHS[d.month][:3]}'
+
+
+def ride_history():
+    """Alle bevestigde ritten: {datum: {'driver': id, 'passengers': [ids]}}."""
+    rides = {r['ride_date']: {'driver': r['driver_id'], 'passengers': []}
+             for r in db().execute('SELECT ride_date, driver_id FROM rides')}
+    for p in db().execute('SELECT ride_date, user_id FROM ride_passengers ORDER BY user_id'):
+        if p['ride_date'] in rides:
+            rides[p['ride_date']]['passengers'].append(p['user_id'])
+    return rides
+
+
+class Ledger:
+    """Houdt per persoon een saldo bij: rijden levert +1 per meerijder op, meerijden kost 1.
+
+    Wie het laagste saldo heeft (dus vaker meereed dan reed), is de volgende chauffeur.
+    Het totaal van alle saldi is altijd 0, dus over tijd middelt het eerlijk uit.
+    """
+
+    def __init__(self, users):
+        self.balance = {u['id']: 0 for u in users}
+        self.drives = {u['id']: 0 for u in users}
+        self.rides_along = {u['id']: 0 for u in users}
+        self.last = {u['id']: '0000-00-00' for u in users}
+
+    def add(self, iso, driver, passengers):
+        passengers = [p for p in passengers if p != driver and p in self.balance]
+        if driver in self.balance:
+            self.balance[driver] += len(passengers)
+            self.drives[driver] += 1
+            self.last[driver] = iso
+        for p in passengers:
+            self.balance[p] -= 1
+            self.rides_along[p] += 1
+
+    def pick(self, present):
+        # Laagste saldo eerst; bij gelijkstand wie het langst niet reed, daarna minst gereden.
+        return min(present, key=lambda u: (self.balance[u['id']], self.last[u['id']],
+                                           self.drives[u['id']], u['id']))['id']
+
+
+def plan_for(end):
+    """Plan alle carpooldagen t/m `end`.
+
+    Bevestigde ritten zijn definitief en tellen mee in het saldo. Vandaag en toekomstige
+    dagen worden virtueel ingepland (met alle aanwezigen als meerijders), zodat niet
+    telkens dezelfde persoon wordt gekozen. Verleden dagen zonder bevestiging tellen niet mee.
+    """
+    users = all_users()
+    by_id = {u['id']: u for u in users}
+    rides = ride_history()
+    attendance = defaultdict(dict)
+    for a in db().execute('SELECT user_id, ride_date, going FROM attendance'):
+        attendance[a['ride_date']][a['user_id']] = a['going']
+    ledger = Ledger(users)
+    since = count_from()
+    today = date.today()
+    active = enabled_days()
+    first = min([date.fromisoformat(d) for d in rides] + [monday(today) - timedelta(weeks=1)])
+    days = []
+    d = first
+    while d <= end:
+        iso = d.isoformat()
+        ride = rides.get(iso)
+        if ride or d.weekday() in active:
+            present = [u for u in users if attendance[iso].get(u['id']) == 1]
+            info = {'date': d, 'iso': iso, 'label': fmt(d), 'present': present,
+                    'responses': attendance[iso], 'done': ride is not None,
+                    'past': d < today, 'today': d == today,
+                    'can_confirm': d <= today and not ride}
+            if ride:
+                info['driver'] = ride['driver']
+                info['passengers'] = [by_id[p] for p in ride['passengers'] if p in by_id]
+                if iso >= since:
+                    ledger.add(iso, ride['driver'], ride['passengers'])
+                elif ride['driver'] in ledger.last:
+                    # Telt niet mee voor het saldo, maar wel voor 'wie reed het langst geleden'.
+                    ledger.last[ride['driver']] = iso
+            else:
+                info['driver'] = ledger.pick(present) if present else None
+                info['passengers'] = [u for u in present if u['id'] != info['driver']]
+                if info['driver'] is not None and d >= today:
+                    ledger.add(iso, info['driver'], [u['id'] for u in info['passengers']])
+            days.append(info)
+        d += timedelta(days=1)
+    return days
+
+
+def stats():
+    ledger = Ledger(all_users())
+    since = count_from()
+    for iso, ride in sorted(ride_history().items()):
+        if iso >= since:
+            ledger.add(iso, ride['driver'], ride['passengers'])
+    return ledger
+
+
+def clean_name(raw):
+    return ' '.join(raw.split())  # spaties aan begin/eind en dubbele spaties weg
+
+
+def find_user(name):
+    return db().execute('SELECT * FROM users WHERE name=? COLLATE NOCASE', (clean_name(name),)).fetchone()
+
+
+ERRORS = {400: 'Dat ging niet goed', 403: 'Dit mag je niet doen', 404: 'Pagina niet gevonden',
+          413: 'Dat formulier was te groot', 500: 'Er ging iets mis'}
+
+
+@app.errorhandler(400)
+@app.errorhandler(403)
+@app.errorhandler(404)
+@app.errorhandler(413)
+@app.errorhandler(500)
+def error_page(e):
+    code = getattr(e, 'code', 500)
+    detail = getattr(e, 'description', '') if code in (400, 403) else ''
+    if detail and detail.startswith(('The browser', 'You don')):  # standaard Engelse teksten
+        detail = ''
+    return render_template('error.html', title=ERRORS.get(code, 'Er ging iets mis'), detail=detail), code
+
+
+@app.route('/setup', methods=['GET', 'POST'])
+def setup():
+    if db().execute('SELECT COUNT(*) FROM users').fetchone()[0]:
+        return redirect(url_for('login'))
+    if request.method == 'POST':
+        name = clean_name(request.form.get('name', ''))
+        pw = request.form.get('password', '')
+        if not 2 <= len(name) <= 60 or len(pw) < 12:
+            flash('Gebruik een naam van 2 tot 60 tekens en een wachtwoord van minimaal 12 tekens.', 'error')
+        else:
+            db().execute('INSERT INTO users(name, password_hash, is_admin) VALUES (?, ?, 1)',
+                         (name, generate_password_hash(pw)))
+            db().commit()
+            flash('Beheerder aangemaakt. Log nu in.', 'success')
+            return redirect(url_for('login'))
+    return render_template('setup.html')
+
+
+@app.route('/login', methods=['GET', 'POST'])
+def login():
+    if not db().execute('SELECT COUNT(*) FROM users').fetchone()[0]:
+        return redirect(url_for('setup'))
+    if g.user:
+        return redirect(url_for('index'))
+    if request.method == 'POST':
+        pw = request.form.get('password', '')
+        user = find_user(request.form.get('name', ''))  # hoofdletters en spaties maken niet uit
+        if user and check_password_hash(user['password_hash'], pw):
+            session.clear()
+            session['user_id'] = user['id']
+            session.permanent = True
+            return redirect(url_for('index'))
+        flash('Naam of wachtwoord klopt niet.', 'error')
+    return render_template('login.html')
+
+
+@app.post('/logout')
+def logout():
+    session.clear()
+    return redirect(url_for('login'))
+
+
+@app.route('/')
+@login_required
+def index():
+    today = date.today()
+    week_offset = request.args.get('week', '0')
+    try:
+        offset = max(-52, min(52, int(week_offset)))
+    except ValueError:
+        offset = 0
+    start = monday(today) + timedelta(weeks=offset)
+    end = start + timedelta(days=13)  # twee weken overzicht, zodat je een week vooruit ziet
+    horizon = today + timedelta(weeks=4)
+    plan = plan_for(max(end, horizon))
+    changes = plan_changes(plan, today, horizon)
+    changed = {c['day']['iso'] for c in changes}
+    display = [dict(d, changed=d['iso'] in changed) for d in plan if start <= d['date'] <= end]
+    upcoming = next((d for d in plan if d['date'] >= today and not d['done'] and d['driver']), None)
+    users = all_users()
+    return render_template('index.html', days=display, users=users,
+                           names={u['id']: u['name'] for u in users}, ledger=stats(),
+                           since=date.fromisoformat(count_from()) if count_from() else None,
+                           offset=offset, week_start=start, week_end=end,
+                           active=enabled_days(), today=today, short=short,
+                           changes=changes, forgotten=forgotten_rides(plan, today),
+                           upcoming=upcoming, week_of=lambda d: (monday(d) - monday(today)).days // 7)
+
+
+CHANGE_VISIBLE = timedelta(hours=24)
+
+
+def plan_changes(plan, today, horizon):
+    """Welke geplande chauffeurs wijken af van wat deze gebruiker als laatste 'normale' stand zag?
+
+    Per dag bewaren we de chauffeur die de gebruiker kende (driver_id). Wijkt de planning
+    daarvan af, dan tonen we 'Gewijzigd' tot maximaal 24 uur na de eerste keer tonen; daarna
+    wordt de nieuwe chauffeur de normale stand. Gaat het terug naar de oude chauffeur, dan
+    verdwijnt de melding meteen.
+    """
+    uid = g.user['id']
+    now = datetime.now()
+    seen = {r['ride_date']: r for r in db().execute(
+        'SELECT ride_date, driver_id, shown_at FROM seen_plan WHERE user_id=?', (uid,))}
+    changes = []
+    for d in plan:
+        if d['done'] or not today <= d['date'] <= horizon:
+            continue
+        row = seen.get(d['iso'])
+        known, shown_at = (row['driver_id'], row['shown_at']) if row else (None, None)
+        if row is None or known is None or known == d['driver']:
+            # Nieuw, eerder nog niemand gepland, of (weer) gelijk aan de bekende stand.
+            new_known, new_shown = d['driver'], None
+        elif shown_at and now - datetime.fromisoformat(shown_at) > CHANGE_VISIBLE:
+            new_known, new_shown = d['driver'], None      # lang genoeg getoond: nieuwe stand
+        else:
+            changes.append({'day': d, 'was': known, 'now': d['driver']})
+            new_known, new_shown = known, shown_at or now.isoformat(timespec='seconds')
+        db().execute('INSERT INTO seen_plan(user_id,ride_date,driver_id,shown_at) VALUES (?,?,?,?) '
+                     'ON CONFLICT(user_id,ride_date) DO UPDATE SET driver_id=excluded.driver_id, '
+                     'shown_at=excluded.shown_at', (uid, d['iso'], new_known, new_shown))
+    db().execute('DELETE FROM seen_plan WHERE user_id=? AND ride_date<?', (uid, today.isoformat()))
+    db().commit()
+    return changes
+
+
+def forgotten_rides(plan, today):
+    """Voorbije dagen waarop iemand zou gaan, maar waarvan nog niet is ingevuld wie reed."""
+    since = count_from()
+    oldest = today - timedelta(days=90)
+    return [d for d in plan if d['past'] and not d['done'] and d['present']
+            and d['iso'] >= since and d['date'] >= oldest]
+
+
+def parse_day(raw):
+    try:
+        return date.fromisoformat(raw)
+    except (ValueError, TypeError):
+        abort(400)
+
+
+def valid_day(raw):
+    d = parse_day(raw)
+    if d.weekday() not in enabled_days():
+        abort(400, 'Dit is geen ingestelde carpooldag.')
+    if not date.today() - timedelta(days=90) <= d <= date.today() + timedelta(days=365):
+        abort(400, 'Datum buiten het toegestane bereik.')
+    return d
+
+
+@app.post('/attendance/<ride_date>')
+@login_required
+def set_attendance(ride_date):
+    d = valid_day(ride_date)
+    if d < date.today():
+        abort(400, 'Je kunt je aanwezigheid uit het verleden niet wijzigen.')
+    if db().execute('SELECT 1 FROM rides WHERE ride_date=?', (ride_date,)).fetchone():
+        abort(400, 'De rit is al bevestigd.')
+    going = request.form.get('going')
+    if going not in ('0', '1'):
+        abort(400)
+    db().execute('INSERT INTO attendance(user_id,ride_date,going) VALUES (?,?,?) '
+                 'ON CONFLICT(user_id,ride_date) DO UPDATE SET going=excluded.going',
+                 (g.user['id'], ride_date, int(going)))
+    db().commit()
+    flash('Je aanwezigheid is bijgewerkt.', 'success')
+    return redirect(url_for('index', week=request.form.get('week', 0)) + f'#day-{ride_date}')
+
+
+def back_to(ride_date):
+    return redirect(url_for('index', week=request.form.get('week', 0)) + f'#day-{ride_date}')
+
+
+@app.post('/confirm/<ride_date>')
+@login_required
+def confirm(ride_date):
+    d = valid_day(ride_date)
+    if d > date.today():
+        abort(400, 'Een toekomstige rit kun je nog niet afronden.')
+    if db().execute('SELECT 1 FROM rides WHERE ride_date=?', (ride_date,)).fetchone():
+        flash('Deze rit is al afgerond.', 'error')
+        return back_to(ride_date)
+    ids = {u['id'] for u in all_users()}
+    try:
+        driver = int(request.form.get('driver', ''))
+        passengers = {int(p) for p in request.form.getlist('passengers')}
+    except ValueError:
+        abort(400)
+    if driver not in ids or not passengers <= ids:
+        abort(400)
+    passengers.discard(driver)
+    try:
+        db().execute('INSERT INTO rides(ride_date,driver_id,confirmed_at) VALUES (?,?,?)',
+                     (ride_date, driver, datetime.now().isoformat(timespec='seconds')))
+    except sqlite3.IntegrityError:
+        # Iemand anders was op hetzelfde moment net iets eerder.
+        db().rollback()
+        flash('Deze rit is net al door iemand anders afgerond.', 'error')
+        return back_to(ride_date)
+    db().executemany('INSERT INTO ride_passengers(ride_date,user_id) VALUES (?,?)',
+                     [(ride_date, p) for p in sorted(passengers)])
+    # Houd de aanwezigheid in lijn met wat er echt gebeurde.
+    for uid in ids:
+        db().execute('INSERT INTO attendance(user_id,ride_date,going) VALUES (?,?,?) '
+                     'ON CONFLICT(user_id,ride_date) DO UPDATE SET going=excluded.going',
+                     (uid, ride_date, int(uid == driver or uid in passengers)))
+    db().commit()
+    flash('Rit opgeslagen! De planning voor de volgende dagen is bijgewerkt.', 'success')
+    return back_to(ride_date)
+
+
+@app.post('/no-ride/<ride_date>')
+@login_required
+def no_ride(ride_date):
+    """Er is die dag niet gereden: iedereen op 'niet gegaan', dan verdwijnt de herinnering."""
+    d = valid_day(ride_date)
+    if d >= date.today():
+        abort(400, 'Dit kan alleen voor een dag die al voorbij is.')
+    for u in all_users():
+        db().execute('INSERT INTO attendance(user_id,ride_date,going) VALUES (?,?,0) '
+                     'ON CONFLICT(user_id,ride_date) DO UPDATE SET going=0', (u['id'], ride_date))
+    db().commit()
+    flash(f'Opgeslagen: op {fmt(d).lower()} is niet gereden.', 'success')
+    return back_to(ride_date)
+
+
+@app.post('/undo/<ride_date>')
+@login_required
+def undo(ride_date):
+    parse_day(ride_date)
+    db().execute('DELETE FROM ride_passengers WHERE ride_date=?', (ride_date,))
+    removed = db().execute('DELETE FROM rides WHERE ride_date=?', (ride_date,)).rowcount
+    db().commit()
+    if removed:
+        flash('De rit is ongedaan gemaakt. Je kunt hem opnieuw invullen.', 'success')
+    else:
+        flash('Deze rit was al ongedaan gemaakt.', 'error')
+    return back_to(ride_date)
+
+
+@app.route('/settings', methods=['GET', 'POST'])
+@admin_required
+def settings():
+    if request.method == 'POST':
+        action = request.form.get('action')
+        if action == 'days':
+            chosen = request.form.getlist('days')
+            if not chosen or any(s not in [str(i) for i in range(7)] for s in chosen):
+                flash('Kies minimaal één geldige dag.', 'error')
+            else:
+                db().execute("UPDATE settings SET value=? WHERE key='weekdays'",
+                             (','.join(sorted(set(chosen))),))
+                db().commit()
+                flash('Carpooldagen aangepast.', 'success')
+        elif action == 'count_from':
+            raw = request.form.get('count_from', '').strip()
+            try:
+                if raw:
+                    date.fromisoformat(raw)
+            except ValueError:
+                flash('Dat is geen geldige datum.', 'error')
+                return redirect(url_for('settings'))
+            db().execute("INSERT INTO settings(key,value) VALUES ('count_from',?) "
+                         "ON CONFLICT(key) DO UPDATE SET value=excluded.value", (raw,))
+            db().commit()
+            flash('Startdatum voor de telling opgeslagen.' if raw else 'Alle ritten tellen weer mee.', 'success')
+        elif action == 'add_user':
+            name = clean_name(request.form.get('name', ''))
+            pw = request.form.get('password', '')
+            if not 2 <= len(name) <= 60 or len(pw) < 12:
+                flash('Naam 2 tot 60 tekens, tijdelijk wachtwoord minimaal 12 tekens.', 'error')
+            elif find_user(name):
+                flash('Deze naam bestaat al.', 'error')
+            else:
+                try:
+                    db().execute('INSERT INTO users(name,password_hash,must_change_password) VALUES (?,?,1)',
+                                 (name, generate_password_hash(pw)))
+                    db().commit()
+                    flash(f'Account voor {name} gemaakt. Deel de inloggegevens persoonlijk.', 'success')
+                except sqlite3.IntegrityError:
+                    flash('Deze naam bestaat al.', 'error')
+        elif action == 'reset_password':
+            user = db().execute('SELECT name FROM users WHERE id=?',
+                                (request.form.get('user_id', ''),)).fetchone()
+            pw = request.form.get('password', '')
+            if not user or len(pw) < 12:
+                flash('Kies een collega en een tijdelijk wachtwoord van minimaal 12 tekens.', 'error')
+            else:
+                db().execute('UPDATE users SET password_hash=?, must_change_password=1 WHERE id=?',
+                             (generate_password_hash(pw), request.form['user_id']))
+                db().commit()
+                flash(f'Tijdelijk wachtwoord voor {user["name"]} ingesteld.', 'success')
+        return redirect(url_for('settings'))
+    return render_template('settings.html', active=enabled_days(), users=all_users(),
+                           count_from=count_from(), today=date.today())
+
+
+@app.route('/password', methods=['GET', 'POST'])
+@login_required
+def change_password():
+    if request.method == 'POST':
+        old = request.form.get('old', '')
+        new = request.form.get('new', '')
+        if not check_password_hash(g.user['password_hash'], old):
+            flash('Huidige wachtwoord is onjuist.', 'error')
+        elif len(new) < 12:
+            flash('Nieuw wachtwoord moet minimaal 12 tekens lang zijn.', 'error')
+        else:
+            db().execute('UPDATE users SET password_hash=?, must_change_password=0 WHERE id=?',
+                         (generate_password_hash(new), g.user['id']))
+            db().commit()
+            flash('Wachtwoord gewijzigd.', 'success')
+            return redirect(url_for('index'))
+    return render_template('password.html')
+
+
+if __name__ == '__main__':
+    app.run(host=os.environ.get('HOST', '127.0.0.1'), port=int(os.environ.get('PORT', '5000')),
+            debug=False)

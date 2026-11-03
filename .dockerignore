@@ -1,0 +1,14 @@
+.git
+.github
+.venv
+__pycache__
+*.pyc
+tests
+data
+*.sqlite3
+*.sqlite3-*
+secret_key.txt
+agenda.ics
+*.ics
+.env
+start.bat

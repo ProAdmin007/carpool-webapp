@@ -1,0 +1,16 @@
+services:
+  carpool:
+    build: .
+    container_name: carpool
+    restart: unless-stopped
+    environment:
+      COOKIE_SECURE: "1"   # alleen inloggen via https (reverse proxy). Zet op "0" om zonder https te testen.
+      TRUST_PROXY: "1"     # https en IP-adres overnemen van de reverse proxy
+    volumes:
+      - carpool-data:/data # database + geheime sleutel; blijft bewaard bij updates
+    ports:
+      # Alleen bereikbaar vanaf de server zelf; de reverse proxy stuurt het verkeer door.
+      - "127.0.0.1:5000:5000"
+
+volumes:
+  carpool-data:

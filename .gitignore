@@ -1,0 +1,9 @@
+.venv/
+__pycache__/
+*.pyc
+carpool.sqlite3
+carpool.sqlite3-*
+.env
+secret_key.txt
+*.ics
+data/

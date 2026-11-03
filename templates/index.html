@@ -1,0 +1,177 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="hero">
+  <div>
+    <div class="eyebrow">Carpoolplanner</div>
+    <h1>Wie rijdt er?</h1>
+    <p class="lead">Geef aan wanneer je naar kantoor gaat. De app kiest automatisch wie er rijdt.</p>
+  </div>
+  <div class="meta">{% for d in active|sort %}<span class="chip">{{ weekdays[d] }}</span>{% endfor %}</div>
+</div>
+
+{% for day in forgotten %}
+<a class="notice warn" href="{{ url_for('index', week=week_of(day.date)) }}#day-{{ day.iso }}">
+  <span class="notice-icon">!</span>
+  <span><strong>Nog invullen: wie reed er op {{ day.label|lower }}?</strong><br>
+  <small>Anders telt deze rit niet mee voor de chauffeur. Tik hier om het in te vullen.</small></span>
+</a>
+{% endfor %}
+{% if changes %}
+<div class="notice info">
+  <span class="notice-icon">↻</span>
+  <div><strong>Gewijzigd sinds je laatste bezoek</strong>
+    <ul>
+    {% for c in changes %}
+      <li><a href="{{ url_for('index', week=week_of(c.day.date)) }}#day-{{ c.day.iso }}">{{ c.day.label }}</a>:
+      {% if c.now == me.id %}<strong>jij rijdt nu</strong> (eerst {{ names[c.was] }})
+      {% elif c.was == me.id %}<strong>jij hoeft niet meer te rijden</strong>, nu {{ names[c.now] if c.now else 'niemand' }}
+      {% elif c.now %}nu rijdt {{ names[c.now] }} (eerst {{ names[c.was] }})
+      {% else %}er gaat niemand meer (eerst {{ names[c.was] }}){% endif %}</li>
+    {% endfor %}
+    </ul>
+  </div>
+</div>
+{% endif %}
+
+<div class="toolbar">
+  <a class="secondary" href="{{ url_for('index', week=offset-1) }}">← Eerder</a>
+  <strong>{{ short(week_start) }} – {{ short(week_end) }}{% if offset != 0 %} · <a class="link" href="{{ url_for('index') }}">naar nu</a>{% endif %}</strong>
+  <a class="secondary" href="{{ url_for('index', week=offset+1) }}">Later →</a>
+</div>
+
+<div class="cards">
+{% for day in days %}
+  <article class="card day {% if day.today %}is-today{% endif %}" id="day-{{ day.iso }}">
+    <div class="day-top">
+      <div>
+        <span class="eyebrow">{{ 'Vandaag' if day.today else ('Afgerond' if day.done else ('Geweest' if day.past else 'Kantoordag')) }}</span>
+        <h2>{{ day.label }}</h2>
+      </div>
+      {% if day.done %}{% if since and day.date < since %}<span class="status">Telt niet mee</span>{% else %}<span class="status completed">Afgerond</span>{% endif %}
+      {% elif day.past and not day.present %}<span class="status">Niet gereden</span>
+      {% elif day.past %}<span class="status warn">Nog niet ingevuld</span>
+      {% elif day.changed %}<span class="status changed">Gewijzigd</span>
+      {% else %}<span class="status pending">Gepland</span>{% endif %}
+    </div>
+
+    <div class="driver">
+      <span class="driver-icon">{{ '✓' if day.done else '🚗' }}</span>
+      <div>
+        <small>{{ 'Heeft gereden' if day.done else 'Rijdt (gepland)' }}</small>
+        <div class="driver-name">{% if day.driver %}{{ names[day.driver] }}{% if me.id == day.driver %} (jij){% endif %}{% else %}Nog niet bekend{% endif %}</div>
+      </div>
+    </div>
+
+    <div class="members">
+      {% if day.done %}
+        <small>Reden mee</small>
+        <div class="people">{% for u in day.passengers %}<span class="person">{{ u.name }}</span>{% else %}<span class="muted">Niemand, reed alleen</span>{% endfor %}</div>
+      {% else %}
+        <small>Gaan naar kantoor</small>
+        <div class="people">{% for u in day.present %}<span class="person">{{ u.name }}</span>{% else %}<span class="muted">Nog niemand aangemeld</span>{% endfor %}</div>
+        {% set missing = users|rejectattr('id', 'in', day.responses.keys()|list)|map(attribute='name')|list %}
+        {% if missing and not day.past %}<p class="muted minor">Nog niet ingevuld: {{ missing|join(', ') }}</p>{% endif %}
+      {% endif %}
+    </div>
+
+    {% if not day.done and not day.past %}
+    <div class="attendance">
+      <p><strong>Ga jij deze dag naar kantoor?</strong></p>
+      <div class="choice">
+        <form method="post" action="{{ url_for('set_attendance', ride_date=day.iso) }}">
+          <input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="going" value="1"><input type="hidden" name="week" value="{{ offset }}">
+          <button class="choice-btn {% if day.responses.get(me.id) == 1 %}selected{% endif %}">✓ Ja, ik ga</button>
+        </form>
+        <form method="post" action="{{ url_for('set_attendance', ride_date=day.iso) }}">
+          <input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="going" value="0"><input type="hidden" name="week" value="{{ offset }}">
+          <button class="choice-btn {% if day.responses.get(me.id) == 0 %}selected no{% endif %}">✕ Nee</button>
+        </form>
+      </div>
+    </div>
+    {% endif %}
+
+    {% if day.can_confirm %}
+    <details class="finish" {% if day.past and day.present %}open{% endif %}>
+      <summary class="primary full">Rit afronden: wie reed er?</summary>
+      <form method="post" action="{{ url_for('confirm', ride_date=day.iso) }}" class="finish-form">
+        <input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="week" value="{{ offset }}">
+        <fieldset>
+          <legend>Wie heeft er gereden?</legend>
+          {% set default_driver = day.driver or me.id %}
+          {% for u in users %}
+          <label class="pick"><input type="radio" name="driver" value="{{ u.id }}" {% if u.id == default_driver %}checked{% endif %} required> {{ u.name }}</label>
+          {% endfor %}
+        </fieldset>
+        <fieldset>
+          <legend>Wie reden er mee?</legend>
+          {% set present_ids = day.present|map(attribute='id')|list %}
+          {% for u in users %}
+          <label class="pick passenger"><input type="checkbox" name="passengers" value="{{ u.id }}" {% if u.id in present_ids and u.id != default_driver %}checked{% endif %}> {{ u.name }}</label>
+          {% endfor %}
+        </fieldset>
+        <button class="primary full">Opslaan</button>
+      </form>
+      {% if day.past %}
+      <form method="post" action="{{ url_for('no_ride', ride_date=day.iso) }}" class="undo" onsubmit="return confirm('Is er op {{ day.label }} echt niet gereden?')">
+        <input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="week" value="{{ offset }}">
+        <button class="linkbtn">Er is die dag niet gereden</button>
+      </form>
+      {% endif %}
+    </details>
+    {% endif %}
+
+    {% if day.done %}
+    <form method="post" action="{{ url_for('undo', ride_date=day.iso) }}" onsubmit="return confirm('Rit van {{ day.label }} ongedaan maken?')" class="undo">
+      <input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="week" value="{{ offset }}">
+      <button class="linkbtn">Klopt niet? Ongedaan maken</button>
+    </form>
+    {% endif %}
+  </article>
+{% else %}
+  <section class="card"><h2>Geen carpooldagen in deze periode</h2><p>De beheerder kan extra dagen instellen via Instellingen.</p></section>
+{% endfor %}
+</div>
+
+<section class="card next-turn">
+  <div class="eyebrow">Volgende keer aan de beurt</div>
+  {% if upcoming %}
+  <div class="next-name">{{ names[upcoming.driver] }}{% if upcoming.driver == me.id %} (jij){% endif %}</div>
+  <p class="muted">{{ upcoming.label }}{% if upcoming.passengers %} · neemt {{ upcoming.passengers|map(attribute='name')|join(' en ') }} mee{% endif %}</p>
+  {% else %}
+  <div class="next-name">Nog niet bekend</div>
+  <p class="muted">Er heeft zich nog niemand aangemeld voor de komende dagen.</p>
+  {% endif %}
+</section>
+
+<details class="card stats-more">
+  <summary>Hoe wordt dit bepaald? <span class="muted">Bekijk de stand</span></summary>
+  <table class="scoreboard">
+    <thead><tr><th></th><th>Gereden</th><th>Meegereden</th><th>Saldo</th></tr></thead>
+    <tbody>
+    {% for u in users %}
+      {% set b = ledger.balance[u.id] %}
+      <tr><td>{{ u.name }}</td><td>{{ ledger.drives[u.id] }}</td><td>{{ ledger.rides_along[u.id] }}</td><td class="{{ 'pos' if b > 0 else ('neg' if b < 0 else '') }}">{{ '+' if b > 0 }}{{ b }}</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  <p class="muted minor">Voor elke collega die met je meerijdt krijg je er 1 bij. Rijd je zelf mee, dan gaat er 1 af. Van wie er die dag gaat, rijdt degene die het laagst staat. Zo rijdt iedereen ongeveer even vaak als hij meerijdt.{% if since %} Ritten tellen mee vanaf {{ short(since) }}.{% endif %}</p>
+</details>
+<p class="footnote">Tip: vul alvast volgende week in. De geplande chauffeur kan nog veranderen als iemand zijn aanwezigheid aanpast of een rit wordt afgerond.</p>
+
+<script>
+// Wie rijdt, kan niet ook meerijden: vinkje bij de chauffeur automatisch uitzetten.
+document.querySelectorAll('.finish-form').forEach(function (form) {
+  function sync() {
+    var driver = form.querySelector('input[name=driver]:checked');
+    form.querySelectorAll('input[name=passengers]').forEach(function (cb) {
+      var isDriver = driver && cb.value === driver.value;
+      if (isDriver) cb.checked = false;
+      cb.disabled = isDriver;
+      cb.parentElement.classList.toggle('off', isDriver);
+    });
+  }
+  form.addEventListener('change', sync);
+  sync();
+});
+</script>
+{% endblock %}

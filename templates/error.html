@@ -1,0 +1,9 @@
+{% extends 'base.html' %}
+{% block content %}
+<section class="auth card">
+  <div class="eyebrow">Oeps</div>
+  <h1>{{ title }}</h1>
+  <p>{{ detail or 'Ververs de pagina en probeer het opnieuw. Blijft het misgaan, laat het dan even weten.' }}</p>
+  <a class="primary full" style="display:block;text-align:center" href="{{ url_for('index') }}">← Terug naar de planning</a>
+</section>
+{% endblock %}

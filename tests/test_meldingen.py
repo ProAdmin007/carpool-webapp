@@ -1,0 +1,143 @@
+"""Tests voor 'Gewijzigd'-meldingen, vergeten ritten en 'volgende keer aan de beurt'."""
+import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from test_rare_acties import A, FUT, PAST, fresh, login, post, text  # noqa: E402
+
+FUT2 = FUT + __import__('datetime').timedelta(days=3)   # de donderdag daarna
+
+
+def everyone_goes(*days):
+    for name in ('Anna', 'Bas', 'Chris'):
+        c, _ = login(name)
+        for d in days:
+            post(c, f'/attendance/{d}', going='1')
+
+
+def test_eerste_bezoek_geen_wijzigingen():
+    fresh()
+    everyone_goes(FUT, FUT2)
+    c, _ = login('Anna')
+    assert 'Gewijzigd sinds' not in text(c.get('/'))
+
+
+def test_wijziging_door_ander_wordt_getoond_en_daarna_weg():
+    fresh()
+    everyone_goes(FUT, FUT2)
+    anna, _ = login('Anna')
+    page = text(anna.get('/'))
+    assert 'Anna (jij)' in page                  # Anna rijdt de eerste dag (accountvolgorde)
+    bas, _ = login('Bas')
+    bas.get('/')
+    # Anna kan de eerste dag niet: dan rijdt een ander
+    post(anna, f'/attendance/{FUT}', going='0')
+    page = text(anna.get('/'))
+    assert 'Gewijzigd sinds je laatste bezoek' in page
+    assert 'jij hoeft niet meer te rijden' in page
+    assert 'status changed' in page
+    # Bas ziet dat zij nu rijdt
+    page = text(bas.get('/'))
+    assert 'jij rijdt nu' in page, page[page.find('notice'):][:600]
+    # Blijft staan bij opnieuw kijken (binnen 24 uur)
+    assert 'jij rijdt nu' in text(bas.get('/'))
+
+
+def test_terug_naar_oude_stand_geen_gewijzigd():
+    fresh()
+    everyone_goes(FUT, FUT2)
+    anna, _ = login('Anna')
+    bas, _ = login('Bas')
+    anna.get('/'); bas.get('/')
+    post(anna, f'/attendance/{FUT}', going='0')       # per ongeluk Nee...
+    assert 'Gewijzigd sinds' in text(anna.get('/'))
+    post(anna, f'/attendance/{FUT}', going='1')       # ...en weer Ja
+    assert 'Gewijzigd sinds' not in text(anna.get('/'))
+    assert 'status changed' not in text(anna.get('/'))
+    assert 'Gewijzigd sinds' not in text(bas.get('/')), 'Bas heeft de tussenstap nooit gezien'
+
+
+def test_wijziging_verdwijnt_na_24_uur():
+    fresh()
+    everyone_goes(FUT, FUT2)
+    anna, _ = login('Anna')
+    anna.get('/')
+    post(anna, f'/attendance/{FUT}', going='0')
+    assert 'Gewijzigd sinds' in text(anna.get('/'))
+    with A.app.app_context():
+        A.db().execute("UPDATE seen_plan SET shown_at='2000-01-01T00:00:00' WHERE shown_at IS NOT NULL")
+        A.db().commit()
+    assert 'Gewijzigd sinds' not in text(anna.get('/'))
+    post(anna, f'/attendance/{FUT}', going='1')       # nu is terugdraaien wél een wijziging
+    assert 'jij rijdt nu' in text(anna.get('/'))
+
+
+def test_vergeten_rit_melding_blijft_tot_ingevuld():
+    fresh()
+    with A.app.app_context():
+        for uid in (1, 2, 3):
+            A.db().execute('INSERT INTO attendance(user_id,ride_date,going) VALUES (?,?,1)', (uid, PAST.isoformat()))
+        A.db().commit()
+    c, _ = login('Chris')
+    for _ in range(3):                            # blijft staan, ook bij herhaald bezoek
+        assert 'Nog invullen: wie reed er' in text(c.get('/'))
+    post(c, f'/confirm/{PAST}', driver='3', passengers=['1', '2'])
+    assert 'Nog invullen' not in text(c.get('/'))
+
+
+def test_er_is_niet_gereden_haalt_melding_weg():
+    fresh()
+    with A.app.app_context():
+        A.db().execute('INSERT INTO attendance(user_id,ride_date,going) VALUES (1,?,1)', (PAST.isoformat(),))
+        A.db().commit()
+    c, _ = login('Bas')
+    assert 'Nog invullen' in text(c.get('/'))
+    assert post(c, f'/no-ride/{PAST}').status_code == 302
+    assert 'Nog invullen' not in text(c.get('/'))
+    assert 'Niet gereden</span>' in text(c.get('/?week=-1')) + text(c.get('/'))
+    assert post(c, f'/no-ride/{FUT}').status_code == 400   # toekomst kan niet
+
+
+def test_vergeten_rit_van_voor_startdatum_geen_melding():
+    fresh()
+    with A.app.app_context():
+        A.db().execute('INSERT INTO attendance(user_id,ride_date,going) VALUES (1,?,1)', (PAST.isoformat(),))
+        A.db().execute("INSERT INTO settings(key,value) VALUES ('count_from',?)", (FUT.isoformat(),))
+        A.db().commit()
+    c, _ = login('Bas')
+    assert 'Nog invullen' not in text(c.get('/'))
+
+
+def test_volgende_keer_aan_de_beurt():
+    fresh()
+    c, _ = login('Chris')
+    assert 'Nog niet bekend' in text(c.get('/'))
+    everyone_goes(FUT)
+    page = text(c.get('/'))
+    i = page.index('Volgende keer aan de beurt')
+    assert 'Anna' in page[i:i + 300] and 'neemt Bas en Chris mee' in page[i:i + 400]
+
+
+def test_telt_niet_mee_is_grijs():
+    fresh()
+    c, _ = login('Anna')
+    post(c, f'/confirm/{PAST}', driver='1', passengers='2')
+    with A.app.app_context():
+        A.db().execute("INSERT INTO settings(key,value) VALUES ('count_from',?)", (FUT.isoformat(),))
+        A.db().commit()
+    page = text(c.get('/?week=-1')) + text(c.get('/'))
+    assert '<span class="status">Telt niet mee</span>' in page
+
+
+if __name__ == '__main__':
+    failed = 0
+    for name, fn in list(globals().items()):
+        if name.startswith('test_') and fn.__module__ == '__main__':
+            try:
+                fn()
+                print('OK   ', name)
+            except Exception as e:  # noqa: BLE001
+                failed += 1
+                print('FOUT ', name, '->', type(e).__name__, e)
+    print(f'\n{failed} test(s) mislukt')
+    sys.exit(1 if failed else 0)
