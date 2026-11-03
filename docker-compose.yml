@@ -4,13 +4,16 @@ services:
     container_name: carpool
     restart: unless-stopped
     environment:
-      COOKIE_SECURE: "1"   # alleen inloggen via https (reverse proxy). Zet op "0" om zonder https te testen.
-      TRUST_PROXY: "1"     # https en IP-adres overnemen van de reverse proxy
+      # Alleen inloggen via https (reverse proxy). Zet op 0 om zonder https te testen.
+      COOKIE_SECURE: "${COOKIE_SECURE:-1}"
+      # https en IP-adres overnemen van de reverse proxy.
+      TRUST_PROXY: "${TRUST_PROXY:-1}"
     volumes:
       - carpool-data:/data # database + geheime sleutel; blijft bewaard bij updates
     ports:
-      # Alleen bereikbaar vanaf de server zelf; de reverse proxy stuurt het verkeer door.
-      - "127.0.0.1:5000:5000"
+      # Standaard alleen bereikbaar vanaf de server zelf; de reverse proxy stuurt het verkeer door.
+      # Draait je proxy in een andere container of op een andere machine, zet CARPOOL_BIND dan op bijv. 5000.
+      - "${CARPOOL_BIND:-127.0.0.1:5000}:5000"
 
 volumes:
   carpool-data:

@@ -46,6 +46,45 @@ docker compose up -d --build
 - Inloggen werkt alleen via **https**, omdat `COOKIE_SECURE=1` staat. Wil je eerst zonder proxy testen, zet dan in `docker-compose.yml` `COOKIE_SECURE` op `"0"` en de poort op `"5000:5000"`.
 - De container gebruikt Nederlandse tijd (`TZ=Europe/Amsterdam`), dus "vandaag" wisselt om middernacht.
 
+### Deployen met Dockhand (makkelijkst)
+
+Met [Dockhand](https://github.com/Finsys/dockhand) haal je de app rechtstreeks uit deze GitHub-repo. Dockhand bouwt de image en zet bij elke nieuwe versie automatisch de update neer.
+
+1. Ga in Dockhand naar **Stacks** en kies **Deploy from Git**.
+2. Kies bij **Repository** voor **Add new**:
+   - **Repository URL:** `https://github.com/ProAdmin007/carpool-webapp.git`
+   - **Branch:** `main`
+   - **Credential:** **None (public)**
+3. Vul de stack in:
+   - **Stack name:** `carpool`
+   - **Compose file path:** `docker-compose.yml`
+   - Laat **Build images on deploy** aangevinkt. Dockhand zet dit zelf aan omdat de compose-file een `build:`-sectie heeft.
+4. Kies hoe updates binnenkomen:
+   - **Enable scheduled sync:** Dockhand kijkt zelf regelmatig of er iets nieuws op GitHub staat. Dit werkt altijd, ook als Dockhand niet vanaf internet bereikbaar is.
+   - **Of Enable webhook:** GitHub meldt een nieuwe versie direct, maar dan moet Dockhand vanaf internet bereikbaar zijn. Klik op **Generate secret** en maak de stack aan. Daarna kopieer je de **Webhook URL** en zet je die in GitHub onder **Settings → Webhooks → Add webhook**:
+     - **Payload URL:** de gekopieerde Webhook URL
+     - **Content type:** `application/json`
+     - **Secret:** het gegenereerde secret
+     - Kies **Just the push event**
+5. Vink **Deploy now** aan en maak de stack aan.
+6. Laat je reverse proxy naar de app wijzen (zie hieronder).
+
+**Instellingen aanpassen** doe je in de omgevingsvariabelen-editor van de stack in Dockhand. Je hoeft de repo daarvoor niet te wijzigen.
+
+| Variabele | Standaard | Wanneer aanpassen |
+|---|---|---|
+| `CARPOOL_BIND` | `127.0.0.1:5000` | Draait je reverse proxy op een andere machine of in een eigen container? Gebruik dan `5000`, of een vrije poort zoals `8085`. |
+| `COOKIE_SECURE` | `1` | Zet tijdelijk op `0` om zonder https te testen. Anders kun je niet inloggen. |
+| `TRUST_PROXY` | `1` | Alleen op `0` zetten als er geen reverse proxy voor de app staat. |
+
+**Bestaande database meenemen** (eenmalig, op de Docker-host):
+
+```bash
+docker cp carpool.sqlite3 carpool:/data/carpool.sqlite3
+docker exec -u root carpool chown carpool /data/carpool.sqlite3
+docker restart carpool
+```
+
 **Bijwerken naar een nieuwe versie**
 
 ```bash
