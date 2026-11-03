@@ -373,7 +373,7 @@ def index():
     changes = plan_changes(plan, today, horizon)
     changed = {c['day']['iso'] for c in changes}
     display = [dict(d, changed=d['iso'] in changed) for d in plan if start <= d['date'] <= end]
-    upcoming = next((d for d in plan if d['date'] >= today and not d['done'] and d['driver']), None)
+    coming = [d for d in plan if d['date'] >= today and not d['done']]
     users = all_users()
     return render_template('index.html', days=display, users=users,
                            names={u['id']: u['name'] for u in users}, ledger=stats(),
@@ -381,7 +381,7 @@ def index():
                            offset=offset, week_start=start, week_end=end,
                            active=enabled_days(), today=today, short=short,
                            changes=changes, forgotten=forgotten_rides(plan, today),
-                           upcoming=upcoming, week_of=lambda d: (monday(d) - monday(today)).days // 7)
+                           next_ride=coming[0] if coming else None, coming=coming[1:5], week_of=lambda d: (monday(d) - monday(today)).days // 7)
 
 
 CHANGE_VISIBLE = timedelta(hours=24)
@@ -461,10 +461,12 @@ def set_attendance(ride_date):
                  (g.user['id'], ride_date, int(going)))
     db().commit()
     flash('Je aanwezigheid is bijgewerkt.', 'success')
-    return redirect(url_for('index', week=request.form.get('week', 0)) + f'#day-{ride_date}')
+    return back_to(ride_date)
 
 
 def back_to(ride_date):
+    if request.form.get('from') == 'top':   # knop bovenaan de pagina: blijf bovenaan
+        return redirect(url_for('index'))
     return redirect(url_for('index', week=request.form.get('week', 0)) + f'#day-{ride_date}')
 
 

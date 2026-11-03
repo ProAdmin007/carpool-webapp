@@ -1,6 +1,6 @@
 {% extends 'base.html' %}
 {% block content %}
-<div class="hero">
+<div class="hero desktop-only">
   <div>
     <div class="eyebrow">Carpoolplanner</div>
     <h1>Wie rijdt er?</h1>
@@ -31,6 +31,61 @@
     </ul>
   </div>
 </div>
+{% endif %}
+
+{% macro my_status(day) %}
+  {%- set r = day.responses.get(me.id) -%}
+  {%- if day.driver == me.id %}<span class="pill drive">Jij rijdt</span>
+  {%- elif r == 1 %}<span class="pill yes">✓ Je gaat</span>
+  {%- elif r == 0 %}<span class="pill no">Niet</span>
+  {%- else %}<span class="pill ask">Invullen</span>{% endif -%}
+{% endmacro %}
+
+{% if next_ride %}
+{% set nr = next_ride %}
+<section class="card next-ride {% if nr.driver == me.id %}is-me{% endif %}">
+  <div class="next-top">
+    <span class="eyebrow">{{ 'Vandaag' if nr.today else 'Volgende rit' }} · {{ nr.label }}</span>
+    {{ my_status(nr) }}
+  </div>
+  <div class="next-name">
+    {% if nr.driver == me.id %}🚗 Jij rijdt
+    {% elif nr.driver %}🚗 {{ names[nr.driver] }} rijdt
+    {% else %}Nog niemand aangemeld{% endif %}
+  </div>
+  <p class="next-sub">
+    {% if nr.passengers %}Mee: {{ nr.passengers|map(attribute='name')|join(', ') }}{% elif nr.driver %}Niemand rijdt mee{% endif %}
+    {% set missing = users|rejectattr('id', 'in', nr.responses.keys()|list)|map(attribute='name')|list %}
+    {% if missing %}<span class="muted"> · nog niet ingevuld: {{ missing|join(', ') }}</span>{% endif %}
+  </p>
+  {% if nr.can_confirm %}
+  <a class="primary full next-btn" href="#day-{{ nr.iso }}">Rit afronden: wie reed er?</a>
+  {% else %}
+  <div class="choice compact">
+    {% for val, label in (('1', '✓ Ik ga'), ('0', '✕ Ik ga niet')) %}
+    <form method="post" action="{{ url_for('set_attendance', ride_date=nr.iso) }}">
+      <input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="going" value="{{ val }}"><input type="hidden" name="from" value="top">
+      <button class="choice-btn {% if nr.responses.get(me.id) == val|int %}selected{% if val == '0' %} no{% endif %}{% endif %}">{{ label }}</button>
+    </form>
+    {% endfor %}
+  </div>
+  {% endif %}
+</section>
+{% endif %}
+
+{% if coming %}
+<section class="card agenda">
+  <div class="eyebrow">Daarna</div>
+  <ul>
+  {% for d in coming %}
+    <li><a href="{{ url_for('index', week=week_of(d.date)) }}#day-{{ d.iso }}">
+      <span class="ag-date">{{ weekdays[d.date.weekday()][:2] }} {{ short(d.date) }}</span>
+      <span class="ag-driver">{% if d.driver %}🚗 {{ 'Jij' if d.driver == me.id else names[d.driver] }}{% else %}<span class="muted">nog niemand</span>{% endif %}</span>
+      {{ my_status(d) }}
+    </a></li>
+  {% endfor %}
+  </ul>
+</section>
 {% endif %}
 
 <div class="toolbar">
@@ -131,17 +186,6 @@
   <section class="card"><h2>Geen carpooldagen in deze periode</h2><p>De beheerder kan extra dagen instellen via Instellingen.</p></section>
 {% endfor %}
 </div>
-
-<section class="card next-turn">
-  <div class="eyebrow">Volgende keer aan de beurt</div>
-  {% if upcoming %}
-  <div class="next-name">{{ names[upcoming.driver] }}{% if upcoming.driver == me.id %} (jij){% endif %}</div>
-  <p class="muted">{{ upcoming.label }}{% if upcoming.passengers %} · neemt {{ upcoming.passengers|map(attribute='name')|join(' en ') }} mee{% endif %}</p>
-  {% else %}
-  <div class="next-name">Nog niet bekend</div>
-  <p class="muted">Er heeft zich nog niemand aangemeld voor de komende dagen.</p>
-  {% endif %}
-</section>
 
 <details class="card stats-more">
   <summary>Hoe wordt dit bepaald? <span class="muted">Bekijk de stand</span></summary>

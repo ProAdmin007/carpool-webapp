@@ -108,14 +108,21 @@ def test_vergeten_rit_van_voor_startdatum_geen_melding():
     assert 'Nog invullen' not in text(c.get('/'))
 
 
-def test_volgende_keer_aan_de_beurt():
+def test_volgende_rit_bovenaan():
     fresh()
     c, _ = login('Chris')
-    assert 'Nog niet bekend' in text(c.get('/'))
-    everyone_goes(FUT)
+    assert 'Nog niemand aangemeld' in text(c.get('/'))
+    from datetime import timedelta
+    from test_rare_acties import TODAY
+    first = next(TODAY + timedelta(days=i) for i in range(7) if (TODAY + timedelta(days=i)).weekday() in (0, 3))
+    second = next(first + timedelta(days=i) for i in range(1, 8) if (first + timedelta(days=i)).weekday() in (0, 3))
+    everyone_goes(first, second)
     page = text(c.get('/'))
-    i = page.index('Volgende keer aan de beurt')
-    assert 'Anna' in page[i:i + 300] and 'neemt Bas en Chris mee' in page[i:i + 400]
+    top = page[page.index('next-ride'):page.index('class="toolbar"')]
+    assert 'Anna rijdt' in top and 'Mee: Bas, Chris' in top
+    assert 'Daarna' in top and 'Je gaat' in top          # korte agenda met eigen status
+    r = post(c, f'/attendance/{second}', going='0', **{'from': 'top'})
+    assert r.location.endswith('/'), 'knop bovenaan springt niet naar beneden'
 
 
 def test_telt_niet_mee_is_grijs():
