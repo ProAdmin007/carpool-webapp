@@ -6,6 +6,11 @@
   <meta name="theme-color" content="#f4f7f9" media="(prefers-color-scheme: light)">
   <meta name="theme-color" content="#0f1518" media="(prefers-color-scheme: dark)">
   <title>Meerijden</title>
+  <link rel="icon" href="{{ url_for('static', filename='favicon.svg') }}" type="image/svg+xml">
+  <link rel="icon" href="{{ url_for('static', filename='favicon.ico') }}" sizes="48x48">
+  <link rel="apple-touch-icon" href="{{ url_for('static', filename='apple-touch-icon.png') }}">
+  <link rel="manifest" href="{{ url_for('static', filename='manifest.webmanifest') }}">
+  <meta name="apple-mobile-web-app-title" content="Meerijden">
   <script nonce="{{ csp_nonce }}">try{var t=localStorage.getItem('theme');if(t)document.documentElement.dataset.theme=t}catch(e){}</script>
   <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>

@@ -106,6 +106,21 @@ def test_geen_open_redirect():
         assert r.location.startswith('/') and not r.location.startswith('//'), r.location
 
 
+def test_iconen_en_manifest():
+    fresh()
+    c = A.app.test_client()
+    page = text(c.get('/login'))
+    for f in ('favicon.svg', 'favicon.ico', 'apple-touch-icon.png', 'manifest.webmanifest'):
+        assert f in page, f
+        assert c.get('/static/' + f).status_code == 200, f
+    r = c.get('/favicon.ico')
+    assert r.status_code == 200 and r.data[:4] == bytes([0, 0, 1, 0])
+    import json
+    m = json.loads(c.get('/static/manifest.webmanifest').data)
+    for icon in m['icons']:
+        assert c.get(icon['src']).status_code == 200
+
+
 if __name__ == '__main__':
     failed = 0
     for name, fn in list(globals().items()):

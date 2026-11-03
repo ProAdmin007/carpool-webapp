@@ -12,3 +12,4 @@ agenda.ics
 *.ics
 .env
 start.bat
+scripts

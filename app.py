@@ -1,5 +1,6 @@
 """Kleine carpoolplanner voor een vertrouwde groep collega's."""
 import hashlib
+import mimetypes
 import os
 import secrets
 import sqlite3
@@ -10,11 +11,13 @@ from datetime import date, datetime, timedelta
 from functools import wraps
 from pathlib import Path
 
-from flask import Flask, abort, flash, g, redirect, render_template, request, session, url_for
+from flask import Flask, abort, flash, g, redirect, render_template, request, send_from_directory, session, url_for
 from flask.sessions import SecureCookieSessionInterface
 from werkzeug.security import check_password_hash, generate_password_hash
 
 ROOT = Path(__file__).resolve().parent
+mimetypes.add_type('application/manifest+json', '.webmanifest')
+mimetypes.add_type('image/svg+xml', '.svg')
 DB_PATH = Path(os.environ.get('CARPOOL_DB', str(ROOT / 'carpool.sqlite3')))
 app = Flask(__name__)
 
@@ -389,6 +392,12 @@ def error_page(e):
     if detail and detail.startswith(('The browser', 'You don')):  # standaard Engelse teksten
         detail = ''
     return render_template('error.html', title=ERRORS.get(code, 'Er ging iets mis'), detail=detail), code
+
+
+@app.route('/favicon.ico')
+def favicon():
+    return send_from_directory(app.static_folder, 'favicon.ico', mimetype='image/vnd.microsoft.icon',
+                               max_age=7 * 24 * 3600)
 
 
 @app.route('/setup', methods=['GET', 'POST'])
