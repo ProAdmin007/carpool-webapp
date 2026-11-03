@@ -76,6 +76,7 @@ Met [Dockhand](https://github.com/Finsys/dockhand) haal je de app rechtstreeks u
 | `CARPOOL_BIND` | `5000` | Andere poort nodig? Gebruik bijvoorbeeld `8085`. Draait de proxy op dezelfde machine en wil je de app niet direct bereikbaar maken in het netwerk, gebruik dan `127.0.0.1:5000`. |
 | `COOKIE_SECURE` | `auto` | Zet op `1` als inloggen alleen via https mag. Inloggen via `http://` lukt dan niet meer. |
 | `TRUST_PROXY` | `1` | Alleen op `0` zetten als er geen reverse proxy voor de app staat. |
+| `TRUSTED_PROXY` | `*` (iedereen) | Vul het IP-adres van je reverse proxy in. Dan accepteert de app alleen van die proxy headers als `X-Forwarded-For`. |
 
 **Bestaande database meenemen** (eenmalig, op de Docker-host):
 
@@ -171,10 +172,34 @@ Een dag die al voorbij is en niet is afgerond, telt niet mee. Je kunt hem achter
 - `start.bat` – dubbelklik-start voor Windows
 - `start.py` – Waitress-webserver (met `TRUST_PROXY=1` achter een reverse proxy)
 - `Dockerfile`, `docker-compose.yml` – container met de data in het volume `/data`
-- `tests/` – tests, draaien met `python tests/test_rare_acties.py` en `python tests/test_meldingen.py`
+- `tests/` – tests, draaien met `python tests/test_rare_acties.py`, `python tests/test_meldingen.py` en `python tests/test_beveiliging.py`
+- `sbom.cdx.json`, `pyproject.toml` – SBOM en projectgegevens
+- `reset_wachtwoord.py` – tijdelijk wachtwoord instellen vanaf de server
 - `templates/` – Nederlandstalige pagina's
 - `static/style.css` – interface, ook geschikt voor telefoon
 - `carpool.sqlite3` – lokale database (wordt bij de eerste start automatisch gemaakt)
+
+## Beveiliging
+
+- **Wachtwoorden** worden opgeslagen als hash (scrypt via Werkzeug). Een wachtwoord moet minimaal 12 tekens hebben.
+- **Wachtwoorden raden** wordt afgeremd. Na 5 foute pogingen op één naam, of 30 vanaf één IP-adres, is inloggen een kwartier geblokkeerd. Een onbekende naam kost evenveel rekentijd als een bekende, zodat je niet kunt achterhalen welke namen bestaan.
+- **Sessies:** de inlogcookie is ondertekend, `HttpOnly` en `SameSite=Lax`. Via https krijgt hij ook het label `Secure`. Wijzig je je wachtwoord, of reset de beheerder het, dan worden alle andere apparaten uitgelogd.
+- **Elk formulier** heeft een CSRF-token. Databasequery's zijn geparametriseerd. Alle invoer wordt ge-escaped.
+- **Headers:** een strikte Content-Security-Policy met nonce (geen inline scripts of styles), `X-Frame-Options: DENY`, `nosniff`, `Referrer-Policy`, HSTS via https, en `Cache-Control: no-store` voor pagina's met persoonlijke gegevens.
+- **In Docker** draait de app als gewone gebruiker, niet als root. `secret_key.txt` is alleen leesbaar voor die gebruiker.
+
+**SBOM en controle van afhankelijkheden**
+
+`requirements.txt` gebruikt vaste versies. `sbom.cdx.json` is de bijbehorende SBOM (CycloneDX 1.6). Opnieuw maken en controleren op bekende kwetsbaarheden:
+
+```bash
+pip install cyclonedx-bom pip-audit bandit
+cyclonedx-py requirements requirements.txt --pyproject pyproject.toml --mc-type application --sv 1.6 --of JSON --output-reproducible -o sbom.cdx.json
+pip-audit -r requirements.txt
+bandit -r . -x ./.venv,./tests
+```
+
+De SBOM beschrijft de Python-pakketten van de app. Wil je ook de onderdelen van de Docker-basisimage zien, gebruik dan bijvoorbeeld `docker sbom` of `syft` op de gebouwde image.
 
 ## Mogelijke uitbreidingen
 

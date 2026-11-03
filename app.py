@@ -1,7 +1,10 @@
 """Kleine carpoolplanner voor een vertrouwde groep collega's."""
+import hashlib
 import os
 import secrets
 import sqlite3
+import threading
+import time
 from collections import defaultdict
 from datetime import date, datetime, timedelta
 from functools import wraps
@@ -23,6 +26,10 @@ def load_secret_key():
     key_file = Path(os.environ.get('SECRET_KEY_FILE', str(ROOT / 'secret_key.txt')))
     if not key_file.exists():
         key_file.write_text(secrets.token_hex(32), encoding='utf-8')
+        try:
+            key_file.chmod(0o600)  # alleen leesbaar voor de app zelf (Linux/Docker)
+        except OSError:
+            pass
     return key_file.read_text(encoding='utf-8').strip()
 
 
@@ -117,14 +124,64 @@ class AutoSecureSessionInterface(SecureCookieSessionInterface):
 app.session_interface = AutoSecureSessionInterface()
 
 
+def password_version(user):
+    """Vingerafdruk van het wachtwoord: verandert het wachtwoord, dan vervallen oude sessies."""
+    return hashlib.sha256(user['password_hash'].encode()).hexdigest()[:16]
+
+
+def start_session(user):
+    session.clear()
+    session['user_id'] = user['id']
+    session['pv'] = password_version(user)
+    session.permanent = True
+
+
+# --- Bescherming tegen wachtwoorden raden -----------------------------------------
+MAX_FAILS_PER_NAME = 5      # per naam ...
+MAX_FAILS_PER_IP = 30       # ... en per IP-adres
+FAIL_WINDOW = 15 * 60       # binnen 15 minuten
+_fails = {}
+_fails_lock = threading.Lock()
+DUMMY_HASH = generate_password_hash(secrets.token_hex(16))  # gelijke rekentijd bij onbekende naam
+
+
+def _recent(key, now):
+    stamps = [t for t in _fails.get(key, []) if now - t < FAIL_WINDOW]
+    _fails[key] = stamps
+    return stamps
+
+
+def login_blocked(name, ip):
+    now = time.monotonic()
+    with _fails_lock:
+        return (len(_recent('n:' + name.lower(), now)) >= MAX_FAILS_PER_NAME
+                or len(_recent('ip:' + ip, now)) >= MAX_FAILS_PER_IP)
+
+
+def register_fail(name, ip):
+    now = time.monotonic()
+    with _fails_lock:
+        for key in ('n:' + name.lower(), 'ip:' + ip):
+            _recent(key, now).append(now)
+
+
+def clear_fails(name):
+    with _fails_lock:
+        _fails.pop('n:' + name.lower(), None)
+
+
 @app.before_request
 def before():
     init_db()
+    g.csp_nonce = secrets.token_urlsafe(16)
     g.user = None
     if session.get('user_id'):
         g.user = db().execute('SELECT * FROM users WHERE id=?', (session['user_id'],)).fetchone()
-        if not g.user:
-            session.clear()
+        if g.user and 'pv' not in session:
+            session['pv'] = password_version(g.user)   # bestaande sessies van voor deze controle
+        if not g.user or session.get('pv') != password_version(g.user):
+            session.clear()                           # account weg of wachtwoord gewijzigd
+            g.user = None
         else:
             session.permanent = True
     if request.method == 'POST':
@@ -146,7 +203,26 @@ def shared():
     if 'csrf' not in session:
         session['csrf'] = secrets.token_urlsafe(32)
     insecure = app.config['SESSION_COOKIE_SECURE'] and not request.is_secure
-    return {'csrf': session['csrf'], 'me': g.get('user'), 'weekdays': WEEKDAYS, 'https_needed': insecure}
+    return {'csrf': session['csrf'], 'me': g.get('user'), 'weekdays': WEEKDAYS, 'https_needed': insecure,
+            'csp_nonce': g.get('csp_nonce', '')}
+
+
+@app.after_request
+def security_headers(resp):
+    nonce = g.get('csp_nonce', '')
+    resp.headers.setdefault('Content-Security-Policy',
+                            "default-src 'self'; script-src 'self' 'nonce-%s'; style-src 'self'; "
+                            "img-src 'self' data:; form-action 'self'; frame-ancestors 'none'; "
+                            "base-uri 'none'; object-src 'none'" % nonce)
+    resp.headers.setdefault('X-Content-Type-Options', 'nosniff')
+    resp.headers.setdefault('X-Frame-Options', 'DENY')
+    resp.headers.setdefault('Referrer-Policy', 'same-origin')
+    resp.headers.setdefault('Permissions-Policy', 'camera=(), microphone=(), geolocation=()')
+    if request.is_secure:
+        resp.headers.setdefault('Strict-Transport-Security', 'max-age=31536000')
+    if request.endpoint != 'static':
+        resp.headers['Cache-Control'] = 'no-store'  # persoonlijke planning niet in caches bewaren
+    return resp
 
 
 def login_required(fn):
@@ -341,12 +417,18 @@ def login():
         return redirect(url_for('index'))
     if request.method == 'POST':
         pw = request.form.get('password', '')
-        user = find_user(request.form.get('name', ''))  # hoofdletters en spaties maken niet uit
-        if user and check_password_hash(user['password_hash'], pw):
-            session.clear()
-            session['user_id'] = user['id']
-            session.permanent = True
+        name = clean_name(request.form.get('name', ''))
+        ip = request.remote_addr or '?'
+        if login_blocked(name, ip):
+            flash('Te veel mislukte pogingen. Wacht een kwartier en probeer het dan opnieuw.', 'error')
+            return render_template('login.html'), 429
+        user = find_user(name)  # hoofdletters en spaties maken niet uit
+        ok = check_password_hash(user['password_hash'] if user else DUMMY_HASH, pw)
+        if user and ok:
+            clear_fails(name)
+            start_session(user)
             return redirect(url_for('index'))
+        register_fail(name, ip)
         flash('Naam of wachtwoord klopt niet.', 'error')
     return render_template('login.html')
 
@@ -608,6 +690,8 @@ def change_password():
             db().execute('UPDATE users SET password_hash=?, must_change_password=0 WHERE id=?',
                          (generate_password_hash(new), g.user['id']))
             db().commit()
+            # Andere apparaten worden uitgelogd; dit apparaat blijft ingelogd.
+            start_session(db().execute('SELECT * FROM users WHERE id=?', (g.user['id'],)).fetchone())
             flash('Wachtwoord gewijzigd.', 'success')
             return redirect(url_for('index'))
     return render_template('password.html')

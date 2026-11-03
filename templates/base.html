@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#f4f7f9" media="(prefers-color-scheme: light)">
   <meta name="theme-color" content="#0f1518" media="(prefers-color-scheme: dark)">
   <title>Meerijden</title>
-  <script>try{var t=localStorage.getItem('theme');if(t)document.documentElement.dataset.theme=t}catch(e){}</script>
+  <script nonce="{{ csp_nonce }}">try{var t=localStorage.getItem('theme');if(t)document.documentElement.dataset.theme=t}catch(e){}</script>
   <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
 <body>
@@ -31,7 +31,12 @@
   {% block content %}{% endblock %}
 </main>
 <footer>Een simpele planning voor jullie carpoolgroep.</footer>
-<script>
+<script nonce="{{ csp_nonce }}">
+// Bevestigingsvraag voor formulieren met data-confirm (geen inline onsubmit i.v.m. CSP).
+document.addEventListener('submit', function (e) {
+  var msg = e.target.getAttribute && e.target.getAttribute('data-confirm');
+  if (msg && !window.confirm(msg)) e.preventDefault();
+});
 (function () {
   var root = document.documentElement, btn = document.getElementById('theme-btn');
   function isDark() {

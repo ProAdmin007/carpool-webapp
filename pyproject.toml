@@ -1,0 +1,8 @@
+[project]
+name = "carpool-webapp"
+version = "1.0.0"
+description = "Simpele Nederlandstalige carpoolplanner (Flask + SQLite)"
+requires-python = ">=3.11"
+
+[project.urls]
+Source = "https://github.com/ProAdmin007/carpool-webapp"

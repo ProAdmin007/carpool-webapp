@@ -17,18 +17,25 @@
 </a>
 {% endfor %}
 {% if changes %}
+{% macro change_line(c) %}
+  <li><a href="{{ url_for('index', week=week_of(c.day.date)) }}#day-{{ c.day.iso }}">{{ c.day.label }}</a>:
+  {% if c.now == me.id %}<strong>jij rijdt nu</strong> (eerst {{ names[c.was] }})
+  {% elif c.was == me.id %}<strong>jij hoeft niet meer te rijden</strong>, nu {{ names[c.now] if c.now else 'niemand' }}
+  {% elif c.now %}nu rijdt {{ names[c.now] }} (eerst {{ names[c.was] }})
+  {% else %}er gaat niemand meer (eerst {{ names[c.was] }}){% endif %}</li>
+{% endmacro %}
+{% set mine = (changes|selectattr('now', 'equalto', me.id)|list + changes|selectattr('was', 'equalto', me.id)|list)|sort(attribute='day.iso') %}
+{% set others = changes|reject('in', mine)|list %}
 <div class="notice info">
   <span class="notice-icon">↻</span>
   <div><strong>Gewijzigd sinds je laatste bezoek</strong>
-    <ul>
-    {% for c in changes %}
-      <li><a href="{{ url_for('index', week=week_of(c.day.date)) }}#day-{{ c.day.iso }}">{{ c.day.label }}</a>:
-      {% if c.now == me.id %}<strong>jij rijdt nu</strong> (eerst {{ names[c.was] }})
-      {% elif c.was == me.id %}<strong>jij hoeft niet meer te rijden</strong>, nu {{ names[c.now] if c.now else 'niemand' }}
-      {% elif c.now %}nu rijdt {{ names[c.now] }} (eerst {{ names[c.was] }})
-      {% else %}er gaat niemand meer (eerst {{ names[c.was] }}){% endif %}</li>
-    {% endfor %}
-    </ul>
+    {% if mine %}<ul>{% for c in mine %}{{ change_line(c) }}{% endfor %}</ul>{% endif %}
+    {% if others %}
+    <details class="more-changes"{% if not mine and others|length <= 2 %} open{% endif %}>
+      <summary>{% if mine %}+ {{ others|length }} andere wijziging{{ 'en' if others|length > 1 }}{% else %}{{ others|length }} wijziging{{ 'en' if others|length > 1 }} bij anderen{% endif %}</summary>
+      <ul>{% for c in others %}{{ change_line(c) }}{% endfor %}</ul>
+    </details>
+    {% endif %}
   </div>
 </div>
 {% endif %}
@@ -147,7 +154,11 @@
 
     {% if day.can_confirm %}
     <details class="finish" {% if day.past and day.present %}open{% endif %}>
+      {% if day.past and not day.present %}
+      <summary class="linkbtn finish-small">Toch gereden? Invullen</summary>
+      {% else %}
       <summary class="primary full">Rit afronden: wie reed er?</summary>
+      {% endif %}
       <form method="post" action="{{ url_for('confirm', ride_date=day.iso) }}" class="finish-form">
         <input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="week" value="{{ offset }}">
         <fieldset>
@@ -167,7 +178,7 @@
         <button class="primary full">Opslaan</button>
       </form>
       {% if day.past %}
-      <form method="post" action="{{ url_for('no_ride', ride_date=day.iso) }}" class="undo" onsubmit="return confirm('Is er op {{ day.label }} echt niet gereden?')">
+      <form method="post" action="{{ url_for('no_ride', ride_date=day.iso) }}" class="undo" data-confirm="Is er op {{ day.label }} echt niet gereden?">
         <input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="week" value="{{ offset }}">
         <button class="linkbtn">Er is die dag niet gereden</button>
       </form>
@@ -176,7 +187,7 @@
     {% endif %}
 
     {% if day.done %}
-    <form method="post" action="{{ url_for('undo', ride_date=day.iso) }}" onsubmit="return confirm('Rit van {{ day.label }} ongedaan maken?')" class="undo">
+    <form method="post" action="{{ url_for('undo', ride_date=day.iso) }}" data-confirm="Rit van {{ day.label }} ongedaan maken?" class="undo">
       <input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="week" value="{{ offset }}">
       <button class="linkbtn">Klopt niet? Ongedaan maken</button>
     </form>
@@ -202,7 +213,7 @@
 </details>
 <p class="footnote">Tip: vul alvast volgende week in. De geplande chauffeur kan nog veranderen als iemand zijn aanwezigheid aanpast of een rit wordt afgerond.</p>
 
-<script>
+<script nonce="{{ csp_nonce }}">
 // Wie rijdt, kan niet ook meerijden: vinkje bij de chauffeur automatisch uitzetten.
 document.querySelectorAll('.finish-form').forEach(function (form) {
   function sync() {
