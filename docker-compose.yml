@@ -4,8 +4,9 @@ services:
     container_name: carpool
     restart: unless-stopped
     environment:
-      # Alleen inloggen via https (reverse proxy). Zet op 0 om zonder https te testen.
-      COOKIE_SECURE: "${COOKIE_SECURE:-1}"
+      # auto = inlogcookie alleen-https als de app via https wordt geopend; via http werkt inloggen ook.
+      # 1 = inloggen alleen via https.
+      COOKIE_SECURE: "${COOKIE_SECURE:-auto}"
       # https en IP-adres overnemen van de reverse proxy.
       TRUST_PROXY: "${TRUST_PROXY:-1}"
     volumes:

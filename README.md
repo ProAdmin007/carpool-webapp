@@ -43,7 +43,7 @@ docker compose up -d --build
 
 - De app luistert op poort `5000` van de server. Je reverse proxy stuurt het https-verkeer daarnaartoe. Draait de proxy op dezelfde machine, dan kun je de poort afschermen voor de rest van het netwerk met `CARPOOL_BIND=127.0.0.1:5000`.
 - Database en geheime sleutel staan in het Docker-volume `carpool-data` (`/data` in de container). Ze blijven bewaard bij updates en herstarts.
-- Inloggen werkt alleen via **https**, omdat `COOKIE_SECURE=1` staat. Wil je eerst zonder proxy testen via `http://<server-ip>:5000`, zet dan `COOKIE_SECURE=0`.
+- Inloggen werkt via https (de reverse proxy) en ook direct via `http://<server-ip>:5000`. Via https krijgt de inlogcookie automatisch het label "alleen https". Wil je inloggen via http helemaal blokkeren, zet dan `COOKIE_SECURE=1`.
 - De container gebruikt Nederlandse tijd (`TZ=Europe/Amsterdam`), dus "vandaag" wisselt om middernacht.
 
 ### Deployen met Dockhand (makkelijkst)
@@ -74,7 +74,7 @@ Met [Dockhand](https://github.com/Finsys/dockhand) haal je de app rechtstreeks u
 | Variabele | Standaard | Wanneer aanpassen |
 |---|---|---|
 | `CARPOOL_BIND` | `5000` | Andere poort nodig? Gebruik bijvoorbeeld `8085`. Draait de proxy op dezelfde machine en wil je de app niet direct bereikbaar maken in het netwerk, gebruik dan `127.0.0.1:5000`. |
-| `COOKIE_SECURE` | `1` | Zet tijdelijk op `0` om zonder https te testen. Anders kun je niet inloggen. |
+| `COOKIE_SECURE` | `auto` | Zet op `1` als inloggen alleen via https mag. Inloggen via `http://` lukt dan niet meer. |
 | `TRUST_PROXY` | `1` | Alleen op `0` zetten als er geen reverse proxy voor de app staat. |
 
 **Bestaande database meenemen** (eenmalig, op de Docker-host):

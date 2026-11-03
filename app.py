@@ -8,6 +8,7 @@ from functools import wraps
 from pathlib import Path
 
 from flask import Flask, abort, flash, g, redirect, render_template, request, session, url_for
+from flask.sessions import SecureCookieSessionInterface
 from werkzeug.security import check_password_hash, generate_password_hash
 
 ROOT = Path(__file__).resolve().parent
@@ -29,7 +30,7 @@ app.config.update(
     SECRET_KEY=load_secret_key(),
     SESSION_COOKIE_HTTPONLY=True,
     SESSION_COOKIE_SAMESITE='Lax',
-    SESSION_COOKIE_SECURE=os.environ.get('COOKIE_SECURE', '0') == '1',
+    SESSION_COOKIE_SECURE=os.environ.get('COOKIE_SECURE', 'auto') == '1',
     # Praktisch 'voor altijd' ingelogd; de cookie wordt bij elk bezoek weer verlengd.
     PERMANENT_SESSION_LIFETIME=timedelta(days=3650),
     SESSION_REFRESH_EACH_REQUEST=True,
@@ -100,6 +101,22 @@ def init_db():
     db().commit()
 
 
+# COOKIE_SECURE: 'auto' (standaard) = cookie alleen-https als de pagina via https is geopend
+# (achter de reverse proxy), anders gewone cookie zodat inloggen via http ook werkt.
+# '1' = altijd alleen-https, '0' = nooit.
+COOKIE_MODE = os.environ.get('COOKIE_SECURE', 'auto')
+
+
+class AutoSecureSessionInterface(SecureCookieSessionInterface):
+    def get_cookie_secure(self, app):
+        if COOKIE_MODE == 'auto':
+            return request.is_secure
+        return super().get_cookie_secure(app)
+
+
+app.session_interface = AutoSecureSessionInterface()
+
+
 @app.before_request
 def before():
     init_db()
@@ -113,7 +130,12 @@ def before():
     if request.method == 'POST':
         if not session.get('csrf') or not secrets.compare_digest(request.form.get('csrf', ''), session['csrf']):
             # Meestal een oud tabblad of een pagina die lang open stond: gewoon opnieuw laten proberen.
+            if app.config['SESSION_COOKIE_SECURE'] and not request.is_secure:
+                abort(400, 'Deze app is ingesteld op alleen https (COOKIE_SECURE=1), maar je opent hem via '
+                           'http. Open de app via het https-adres, of verwijder COOKIE_SECURE.')
             flash('Deze pagina was verouderd. Probeer het opnieuw.', 'error')
+            if request.endpoint in ('login', 'setup'):
+                return redirect(request.path)  # zelfde pagina, met melding
             return redirect(url_for('index') if g.user else url_for('login'))
     if g.user and g.user['must_change_password'] and request.endpoint not in ('change_password', 'logout', 'static'):
         return redirect(url_for('change_password'))

@@ -116,6 +116,31 @@ def test_setup_niet_meer_bereikbaar_als_er_accounts_zijn():
 
 # ---------------------------------------------------------------- sessie / CSRF
 
+def test_cookie_automatisch_alleen_https_achter_https():
+    fresh()
+    c = A.app.test_client()
+    r = c.get('/login', base_url='https://carpool.voorbeeld.nl')
+    assert 'Secure' in r.headers.get('Set-Cookie', '')
+    c = A.app.test_client()
+    r = c.get('/login')                                   # gewoon http
+    assert 'Secure' not in r.headers.get('Set-Cookie', '')
+
+
+def test_setup_met_verlopen_formulier_blijft_op_setup():
+    """Geen rondje setup -> login -> setup meer."""
+    with A.app.app_context():
+        A.init_db()
+        for t in ('ride_passengers', 'rides', 'attendance', 'seen_plan', 'users'):
+            A.db().execute(f'DELETE FROM {t}')
+        A.db().commit()
+    c = A.app.test_client()
+    c.get('/setup')
+    r = c.post('/setup', data={'csrf': 'fout', 'name': 'Anna', 'password': PW})
+    assert r.status_code == 302 and r.location.endswith('/setup')
+    assert 'verouderd' in text(c.get('/setup'))
+    fresh()
+
+
 def test_verlopen_formulier_geeft_vriendelijke_melding():
     """Bijv. twee tabbladen open en in de ene uitgelogd en weer ingelogd."""
     fresh()
