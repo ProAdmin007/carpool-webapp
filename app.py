@@ -123,7 +123,8 @@ def before():
 def shared():
     if 'csrf' not in session:
         session['csrf'] = secrets.token_urlsafe(32)
-    return {'csrf': session['csrf'], 'me': g.get('user'), 'weekdays': WEEKDAYS}
+    insecure = app.config['SESSION_COOKIE_SECURE'] and not request.is_secure
+    return {'csrf': session['csrf'], 'me': g.get('user'), 'weekdays': WEEKDAYS, 'https_needed': insecure}
 
 
 def login_required(fn):
