@@ -6,7 +6,8 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     HOST=0.0.0.0 \
     PORT=5000 \
     CARPOOL_DB=/data/carpool.sqlite3 \
-    SECRET_KEY_FILE=/data/secret_key.txt
+    SECRET_KEY_FILE=/data/secret_key.txt \
+    VAPID_KEY_FILE=/data/vapid_private.pem
 
 # tzdata: zodat 'vandaag' in Nederlandse tijd wisselt, niet in UTC.
 RUN apt-get update \
@@ -17,7 +18,7 @@ WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-COPY app.py start.py importeer_agenda.py reset_wachtwoord.py ./
+COPY app.py push.py start.py importeer_agenda.py reset_wachtwoord.py ./
 COPY templates templates
 COPY static static
 

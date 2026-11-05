@@ -11,6 +11,7 @@ from pathlib import Path
 
 os.environ['CARPOOL_DB'] = os.path.join(tempfile.mkdtemp(), 'test.sqlite3')
 os.environ['SECRET_KEY'] = 'test-sleutel'
+os.environ['VAPID_KEY_FILE'] = os.path.join(os.path.dirname(os.environ['CARPOOL_DB']), 'vapid.pem')
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 import app as A  # noqa: E402
 
@@ -56,7 +57,7 @@ def fresh():
     with A.app.app_context():
         A.init_db()
         db = A.db()
-        for t in ('ride_passengers', 'rides', 'attendance', 'seen_plan', 'feedback', 'audit_log', 'extra_days', 'users'):
+        for t in ('ride_passengers', 'rides', 'attendance', 'seen_plan', 'feedback', 'audit_log', 'extra_days', 'push_subscriptions', 'push_known', 'push_sent', 'users'):
             db.execute(f'DELETE FROM {t}')
         db.execute("DELETE FROM settings WHERE key != 'weekdays'")
         db.execute("UPDATE settings SET value='0,3' WHERE key='weekdays'")

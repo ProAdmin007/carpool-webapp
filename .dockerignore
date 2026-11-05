@@ -13,3 +13,4 @@ agenda.ics
 .env
 start.bat
 scripts
+vapid_private.pem

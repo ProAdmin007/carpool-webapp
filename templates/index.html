@@ -23,6 +23,11 @@
   <small>Ga je mee? Tik hier om het in te vullen.</small></span>
 </a>
 {% endfor %}
+<div class="notice info push-prompt" id="push-prompt" hidden>
+  <span class="notice-icon">🔔</span>
+  <a class="push-prompt-text" href="{{ url_for('notifications_page') }}"><strong>Meldingen aanzetten ›</strong> <span class="muted">weet wanneer jij rijdt</span></a>
+  <button type="button" class="push-dismiss" id="push-dismiss" aria-label="Niet nu">×</button>
+</div>
 {% macro solo_text(day, cap=false) -%}
   {{- "Alleen" if cap else "alleen" }} {% if day.present[0].id == me.id %}jij gaat{% else %}{{ day.present[0].name }} gaat{% endif -%}
 {%- endmacro %}
@@ -320,10 +325,24 @@
   </div>
 </details>
 <a class="card cal-link" href="{{ url_for('calendar_page') }}"><span>📅</span><span><strong>Ritten in je eigen agenda</strong><br><small class="muted">Google, Outlook of iPhone. Synchroniseert vanzelf.</small></span><span class="cal-arrow">›</span></a>
+<a class="card cal-link" href="{{ url_for('notifications_page') }}"><span>🔔</span><span><strong>Meldingen op je telefoon</strong><br><small class="muted">Weet meteen wanneer jij moet rijden.</small></span><span class="cal-arrow">›</span></a>
 <a class="card cal-link" href="{{ url_for('feedback') }}"><span>💬</span><span><strong>Feedback of een idee?</strong><br><small class="muted">Laat weten wat beter kan.</small></span><span class="cal-arrow">›</span></a>
 <p class="footnote">Tip: vul alvast volgende week in. De geplande chauffeur kan nog veranderen als iemand zijn aanwezigheid aanpast of een rit wordt afgerond.</p>
 
 <script nonce="{{ csp_nonce }}">
+// Eén regel bovenaan om meldingen aan te zetten: alleen als dit apparaat het kan en je nog niet hebt gekozen.
+(function () {
+  var box = document.getElementById('push-prompt');
+  var dismissed = false;
+  try { dismissed = localStorage.getItem('pushPromptDismissed') === '1'; } catch (e) {}
+  if (!box || dismissed || !('serviceWorker' in navigator) || !('PushManager' in window) || !('Notification' in window)
+      || Notification.permission !== 'default') return;
+  box.hidden = false;
+  document.getElementById('push-dismiss').addEventListener('click', function () {
+    box.hidden = true;
+    try { localStorage.setItem('pushPromptDismissed', '1'); } catch (e) {}
+  });
+})();
 // "Extra dag": na een foutmelding (#extra-day) staat het formulier meteen open.
 if (location.hash === "#extra-day") document.getElementById("extra-day").open = true;
 // Wie rijdt, kan niet ook meerijden: vinkje bij de chauffeur automatisch uitzetten.

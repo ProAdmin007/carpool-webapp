@@ -7,3 +7,4 @@ carpool.sqlite3-*
 secret_key.txt
 *.ics
 data/
+vapid_private.pem

@@ -175,6 +175,23 @@ Onderaan de planning staat **Ritten in je eigen agenda**. Daar vindt iedereen ee
 - In de agenda staan de dagen waarop je gaat, als hele-dag-afspraak die je niet als bezet toont. Ritten tot 8 weken vooruit en 60 dagen terug.
 - Wie de link heeft, kan je ritten zien. Lekt hij uit, klik dan op **Nieuwe link maken**. De oude link werkt dan direct niet meer.
 
+## Meldingen
+
+Onderaan de planning staat **🔔 Meldingen op je telefoon**. Daar zet je per apparaat meldingen aan. Bovenaan de planning verschijnt ook één keer een regel *Meldingen aanzetten ›*, alleen op apparaten die meldingen kunnen ontvangen. Je krijgt een melding:
+
+- als de planning verandert en jij moet nu rijden, of juist niet meer (de komende 8 dagen);
+- de avond ervoor vanaf 19:00: wie er morgen rijdt, of de vraag of je morgen gaat als je dat nog niet hebt ingevuld;
+- na de rit vanaf 17:30: de vraag wie er gereden heeft, als dat nog niet is ingevuld;
+- als een collega een extra dag toevoegt.
+
+Wat je zelf aanpast, krijg je niet nog eens als melding. Elke melding wordt maar één keer gestuurd.
+
+- **Android, Windows, Mac:** werkt in Chrome, Edge en Firefox, ook als de app dicht is.
+- **iPhone/iPad** (iOS 16.4 of nieuwer): zet de app eerst op je beginscherm via Safari → Deel → *Zet op beginscherm*, en zet meldingen daarna aan vanuit die app.
+- **Werkt alleen via https**, dus via de reverse proxy (bijvoorbeeld `https://carpool.example.nl`), niet via `http://…:5000`.
+
+Technisch is dit standaard Web Push: de app stuurt de melding versleuteld naar de push-dienst van de browser (Google, Mozilla, Apple of Microsoft), zonder account of externe dienst. De app maakt bij de eerste keer een eigen sleutel `vapid_private.pem` aan, in Docker op het volume (`/data`). Bewaar die net als `secret_key.txt`: raakt hij kwijt, dan moet iedereen meldingen opnieuw aanzetten. Met `PUSH_CONTACT` kun je een contactadres (`mailto:` of `https://`) meegeven voor de push-diensten.
+
 ## Feedback
 
 Iedereen kan via **💬 Feedback** een bericht sturen. Op de planning staat dat onderaan als kaart, op andere pagina's als link onderaan. De beheerder ziet de berichten onder **Instellingen → Feedback**, met een rode teller in het menu zolang er openstaande berichten zijn, en zet ze daar op **Afgehandeld**. Je kunt maximaal 10 berichten per dag sturen, van hooguit 2000 tekens.
@@ -187,7 +204,7 @@ De beheerder vindt onder **Instellingen → 📋 Auditlog bekijken** wie wat hee
 - **Ritten:** rit afgerond (wie reed, wie reed mee), ongedaan gemaakt, niet gereden.
 - **Aanwezigheid:** Ja/Nee per dag.
 - **Instellingen:** carpooldagen, startdatum van de telling, collega toegevoegd, wachtwoord van een collega gereset.
-- **Account:** eigen wachtwoord gewijzigd, nieuwe agendalink, wachtwoord gereset via `reset_wachtwoord.py`.
+- **Account:** eigen wachtwoord gewijzigd, nieuwe agendalink, meldingen aan- of uitgezet, wachtwoord gereset via `reset_wachtwoord.py`.
 - **Feedback:** verstuurd, afgehandeld of heropend.
 
 Per regel worden het IP-adres en het soort apparaat (iPhone, Android, Windows, …) bewaard. Achter Cloudflare komt het IP-adres uit de header `CF-Connecting-IP`. Zie het als een aanwijzing, niet als bewijs. Wachtwoorden worden nooit gelogd. Regels ouder dan 365 dagen worden automatisch verwijderd.
@@ -198,7 +215,9 @@ Per regel worden het IP-adres en het soort apparaat (iPhone, Android, Windows, �
 
 ## Technische opzet
 
-- `app.py` – alle Flask-routes, SQLite-database, authenticatie en eerlijke planning (`Ledger` + `plan_for`)
+- `app.py` – alle Flask-routes, SQLite-database, authenticatie, eerlijke planning (`Ledger` + `plan_for`) en wanneer er meldingen komen
+- `push.py` – Web Push versturen (VAPID en versleuteling)
+- `static/sw.js` – service worker die meldingen op het apparaat toont
 - `start.bat` – dubbelklik-start voor Windows
 - `start.py` – Waitress-webserver (met `TRUST_PROXY=1` achter een reverse proxy)
 - `Dockerfile`, `docker-compose.yml` – container met de data in het volume `/data`
@@ -216,7 +235,8 @@ Per regel worden het IP-adres en het soort apparaat (iPhone, Android, Windows, �
 - **Sessies:** de inlogcookie is ondertekend, `HttpOnly` en `SameSite=Lax`. Via https krijgt hij ook het label `Secure`. Wijzig je je wachtwoord, of reset de beheerder het, dan worden alle andere apparaten uitgelogd.
 - **Elk formulier** heeft een CSRF-token. Databasequery's zijn geparametriseerd. Alle invoer wordt ge-escaped.
 - **Headers:** een strikte Content-Security-Policy met nonce (geen inline scripts of styles), `X-Frame-Options: DENY`, `nosniff`, `Referrer-Policy`, HSTS via https, en `Cache-Control: no-store` voor pagina's met persoonlijke gegevens.
-- **In Docker** draait de app als gewone gebruiker, niet als root. `secret_key.txt` is alleen leesbaar voor die gebruiker.
+- **In Docker** draait de app als gewone gebruiker, niet als root. `secret_key.txt` en `vapid_private.pem` zijn alleen leesbaar voor die gebruiker.
+- **Meldingen** worden end-to-end versleuteld (RFC 8291); de push-dienst kan ze niet lezen. De app stuurt alleen naar bekende push-diensten van Google, Mozilla, Apple en Microsoft.
 
 **SBOM en controle van afhankelijkheden**
 
@@ -233,7 +253,7 @@ De SBOM beschrijft de Python-pakketten van de app. Wil je ook de onderdelen van 
 
 ## Mogelijke uitbreidingen
 
-Automatische herinnering om de volgende week in te vullen, feestdagen/vakanties, notificaties, of apart rijden voor heen- en terugreis. Begin met deze simpele variant om te zien hoe jullie hem gebruiken.
+Automatische herinnering om de volgende week in te vullen, feestdagen/vakanties, of apart rijden voor heen- en terugreis. Begin met deze simpele variant om te zien hoe jullie hem gebruiken.
 
 ## ☕ Support
 

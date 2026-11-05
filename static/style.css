@@ -119,6 +119,17 @@ table.scoreboard{border-collapse:collapse;font-size:13px}
 
 .btn-link{display:block;text-align:center}
 
+/* Meldingen */
+.notice.push-prompt{align-items:center;padding:8px 12px}
+.push-prompt[hidden]{display:none}
+.push-prompt .notice-icon{width:24px;height:24px;font-size:13px}
+.push-prompt-text{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.push-dismiss{flex-shrink:0;background:none;border:0;color:var(--blue-text);font-size:20px;line-height:1;padding:0 4px}
+.push-card{margin-bottom:16px}
+.push-status{font-weight:650;color:var(--text)}
+.push-buttons{display:grid;gap:10px;margin-top:12px}
+.push-buttons [hidden]{display:none}
+.push-ios ol{padding-left:20px;margin:6px 0 4px;color:var(--text-2);font-size:14px;line-height:1.5}
 /* 'Gewijzigd': één regel, tik voor de hele lijst */
 .notice.change-notice{display:block;padding:8px 12px}
 .change-notice summary{list-style:none;cursor:pointer;display:flex;align-items:center;gap:10px}

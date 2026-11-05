@@ -1,5 +1,6 @@
 """Kleine carpoolplanner voor een vertrouwde groep collega's."""
 import hashlib
+import json
 import mimetypes
 import os
 import secrets
@@ -8,6 +9,7 @@ import threading
 import time
 from collections import defaultdict
 from datetime import date, datetime, timedelta, timezone
+from datetime import time as dt_time
 from fractions import Fraction
 from functools import wraps
 from pathlib import Path
@@ -17,6 +19,8 @@ from flask import (Flask, abort, flash, g, has_request_context, redirect, render
                    send_from_directory, session, url_for)
 from flask.sessions import SecureCookieSessionInterface
 from werkzeug.security import check_password_hash, generate_password_hash
+
+import push
 
 ROOT = Path(__file__).resolve().parent
 mimetypes.add_type('application/manifest+json', '.webmanifest')
@@ -120,6 +124,28 @@ def init_db():
           device TEXT NOT NULL DEFAULT ''
         );
         CREATE INDEX IF NOT EXISTS audit_log_at ON audit_log(at);
+        CREATE TABLE IF NOT EXISTS push_subscriptions (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+          endpoint TEXT NOT NULL UNIQUE,
+          p256dh TEXT NOT NULL,
+          auth TEXT NOT NULL,
+          device TEXT NOT NULL DEFAULT '',
+          created_at TEXT NOT NULL
+        );
+        CREATE TABLE IF NOT EXISTS push_known (
+          user_id INTEGER NOT NULL,
+          ride_date TEXT NOT NULL,
+          driver_id INTEGER,
+          PRIMARY KEY (user_id, ride_date)
+        );
+        CREATE TABLE IF NOT EXISTS push_sent (
+          user_id INTEGER NOT NULL,
+          kind TEXT NOT NULL,
+          ride_date TEXT NOT NULL,
+          sent_at TEXT NOT NULL,
+          PRIMARY KEY (user_id, kind, ride_date)
+        );
         CREATE TABLE IF NOT EXISTS extra_days (
           ride_date TEXT PRIMARY KEY,
           created_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
@@ -475,6 +501,8 @@ AUDIT_ACTIONS = {   # actie: (categorie, omschrijving)
     'feedback_sent': ('Feedback', 'Feedback verstuurd'),
     'feedback_done': ('Feedback', 'Feedback afgehandeld'),
     'feedback_open': ('Feedback', 'Feedback heropend'),
+    'push_on': ('Account', 'Meldingen aangezet'),
+    'push_off': ('Account', 'Meldingen uitgezet'),
 }
 AUDIT_CATEGORIES = sorted({c for c, _ in AUDIT_ACTIONS.values()})
 
@@ -505,6 +533,7 @@ def audit(action, detail='', user=None):
     db().execute('DELETE FROM audit_log WHERE at<?',
                  ((now - timedelta(days=AUDIT_KEEP_DAYS)).isoformat(timespec='seconds'),))
     db().commit()
+    push_wakeup(user['id'] if user else None)   # planning kan veranderd zijn: meldingen nalopen
 
 
 ERRORS = {400: 'Dat ging niet goed', 403: 'Dit mag je niet doen', 404: 'Pagina niet gevonden',
@@ -1095,6 +1124,239 @@ def change_password():
             flash('Wachtwoord gewijzigd.', 'success')
             return redirect(url_for('index'))
     return render_template('password.html')
+
+
+# --- Meldingen (Web Push) ------------------------------------------------------------
+# Wanneer krijg je een melding?
+#  - planning gewijzigd: jij moet nu rijden of hoeft niet meer (komende 8 dagen)
+#  - een collega voegt een extra dag toe en jij hebt nog niet gereageerd
+#  - de avond ervoor (vanaf 19:00): wie er morgen rijdt, of de vraag of je morgen gaat
+#  - na de rit (vanaf 17:30): de vraag wie er gereden heeft, als dat nog niet is ingevuld
+VAPID_KEY_FILE = Path(os.environ.get('VAPID_KEY_FILE', str(ROOT / 'vapid_private.pem')))
+PUSH_CONTACT = os.environ.get('PUSH_CONTACT', 'https://github.com/ProAdmin007/carpool-webapp')
+PUSH_HORIZON = timedelta(days=8)
+PUSH_HOSTS = ('fcm.googleapis.com', '.googleapis.com', '.mozilla.com', '.push.apple.com', '.notify.windows.com')
+_vapid = None
+_vapid_lock = threading.Lock()
+_push_event = threading.Event()
+_push_actors = set()
+_push_actors_lock = threading.Lock()
+
+
+def vapid_key():
+    global _vapid
+    with _vapid_lock:
+        if _vapid is None:
+            VAPID_KEY_FILE.parent.mkdir(parents=True, exist_ok=True)
+            _vapid = push.load_vapid_key(VAPID_KEY_FILE)
+        return _vapid
+
+
+def push_wakeup(actor_id=None):
+    """Seintje aan de achtergrondtaak dat er iets is veranderd (wie het deed, krijgt daar zelf geen melding van)."""
+    if actor_id:
+        with _push_actors_lock:
+            _push_actors.add(actor_id)
+    _push_event.set()
+
+
+def valid_push_endpoint(endpoint):
+    from urllib.parse import urlsplit
+    parts = urlsplit(endpoint or '')
+    host = (parts.hostname or '').lower()
+    return (parts.scheme == 'https' and len(endpoint) <= 1000
+            and any(host == h.lstrip('.') or host.endswith(h if h.startswith('.') else '.' + h) for h in PUSH_HOSTS))
+
+
+def deliver(user_id, message):
+    """Stuur een melding naar alle apparaten van deze gebruiker; ruim verlopen abonnementen op."""
+    subs = db().execute('SELECT * FROM push_subscriptions WHERE user_id=?', (user_id,)).fetchall()
+    sent = 0
+    for s in subs:
+        try:
+            status = push.send(dict(s), message, vapid_key(), PUSH_CONTACT)
+        except Exception as e:  # noqa: BLE001 - één kapot abonnement mag de rest niet tegenhouden
+            app.logger.warning('Melding versturen mislukt: %s', e)
+            continue
+        if status in (404, 410):
+            db().execute('DELETE FROM push_subscriptions WHERE id=?', (s['id'],))
+        elif 200 <= status < 300:
+            sent += 1
+        else:
+            app.logger.warning('Push-server gaf status %s', status)
+    db().commit()
+    return sent
+
+
+def day_short(d):
+    return f'{WEEKDAYS[d.weekday()][:2]} {short(d)}'
+
+
+def collect_notifications(now, actors=()):
+    """Bepaal welke meldingen er nu verstuurd moeten worden: [(user_id, bericht), ...].
+
+    Houdt in push_known/push_sent bij wat al gemeld is, zodat niemand dubbel een melding krijgt.
+    """
+    today = now.date()
+    subscribed = [r['user_id'] for r in db().execute('SELECT DISTINCT user_id FROM push_subscriptions')]
+    if not subscribed:
+        return []
+    names = {u['id']: u['name'] for u in all_users()}
+    plan = plan_for(today + PUSH_HORIZON)
+    by_iso = {d['iso']: d for d in plan}
+    sent_keys = {(r['user_id'], r['kind'], r['ride_date']) for r in db().execute('SELECT * FROM push_sent')}
+    out = []
+
+    def mark(uid, kind, iso):
+        db().execute('INSERT OR IGNORE INTO push_sent(user_id,kind,ride_date,sent_at) VALUES (?,?,?,?)',
+                     (uid, kind, iso, now.isoformat(timespec='seconds')))
+        sent_keys.add((uid, kind, iso))
+
+    # 1. Planning gewijzigd voor jou
+    known = {(r['user_id'], r['ride_date']): r['driver_id'] for r in db().execute('SELECT * FROM push_known')}
+    upcoming = [d for d in plan if not d['done'] and today <= d['date'] <= today + PUSH_HORIZON]
+    for uid in subscribed:
+        lines = []
+        for d in upcoming:
+            key, new = (uid, d['iso']), d['driver']
+            old = known.get(key, 'onbekend')
+            if old != 'onbekend' and old != new and uid not in actors and uid in (old, new):
+                if new == uid:
+                    lines.append(f"{day_short(d['date'])}: jij rijdt nu" + (f' (eerst {names[old]})' if old in names else ''))
+                elif new:
+                    lines.append(f"{day_short(d['date'])}: jij hoeft niet te rijden, nu rijdt {names.get(new, '?')}")
+                else:
+                    lines.append(f"{day_short(d['date'])}: jij hoeft niet te rijden" + (' (geen carpool)' if d.get('solo') else ''))
+            db().execute('INSERT INTO push_known(user_id,ride_date,driver_id) VALUES (?,?,?) '
+                         'ON CONFLICT(user_id,ride_date) DO UPDATE SET driver_id=excluded.driver_id', (uid, d['iso'], new))
+        if lines:
+            out.append((uid, {'title': '🚗 Planning gewijzigd', 'body': '\n'.join(lines), 'url': '/', 'tag': 'planning'}))
+
+    # 2. Uitnodiging voor een extra dag
+    for d in upcoming:
+        if not d['extra']:
+            continue
+        for uid in subscribed:
+            if d['extra_by'] != uid and uid not in d['responses'] and (uid, 'uitnodiging', d['iso']) not in sent_keys:
+                out.append((uid, {'title': f"＋ {names.get(d['extra_by'], 'Een collega')} wil ook op {d['label'].lower()} carpoolen",
+                                  'body': 'Ga je mee? Tik om het in te vullen.', 'url': f"/#day-{d['iso']}",
+                                  'tag': f"extra-{d['iso']}"}))
+                mark(uid, 'uitnodiging', d['iso'])
+
+    # 3. De avond ervoor: wie rijdt er morgen?
+    tomorrow = by_iso.get((today + timedelta(days=1)).isoformat())
+    if tomorrow and not tomorrow['done'] and dt_time(19, 0) <= now.time() < dt_time(23, 0):
+        for uid in subscribed:
+            if (uid, 'morgen', tomorrow['iso']) in sent_keys:
+                continue
+            going = tomorrow['responses'].get(uid)
+            others = [u['name'] for u in tomorrow['present'] if u['id'] not in (uid, tomorrow['driver'])]
+            if going == 1 and tomorrow['driver'] == uid:
+                msg = {'title': '🚗 Morgen rijd jij', 'body': ('Mee: ' + ', '.join(others)) if others else 'Niemand rijdt mee.'}
+            elif going == 1 and tomorrow['driver']:
+                msg = {'title': f"🚗 Morgen rijdt {names.get(tomorrow['driver'], '?')}",
+                       'body': 'Jij rijdt mee.' + (' Ook mee: ' + ', '.join(others) + '.' if others else '')}
+            elif going is None:
+                msg = {'title': 'Ga je morgen naar kantoor?', 'body': 'Vul het even in, dan weet iedereen wie er rijdt.'}
+            else:
+                continue        # gaat niet, of alleen: geen melding (kan later op de avond nog veranderen)
+            out.append((uid, dict(msg, url=f"/#day-{tomorrow['iso']}", tag=f"morgen-{tomorrow['iso']}")))
+            mark(uid, 'morgen', tomorrow['iso'])
+
+    # 4. Na de rit: wie reed er vandaag?
+    ride = by_iso.get(today.isoformat())
+    if ride and not ride['done'] and len(ride['present']) > 1 and dt_time(17, 30) <= now.time() < dt_time(22, 0):
+        for u in ride['present']:
+            if u['id'] in subscribed and (u['id'], 'afronden', ride['iso']) not in sent_keys:
+                out.append((u['id'], {'title': 'Wie reed er vandaag?', 'body': 'Tik om de rit af te ronden, dan klopt de planning.',
+                                      'url': f"/#day-{ride['iso']}", 'tag': f"afronden-{ride['iso']}"}))
+                mark(u['id'], 'afronden', ride['iso'])
+
+    db().execute('DELETE FROM push_known WHERE ride_date<?', (today.isoformat(),))
+    db().execute('DELETE FROM push_sent WHERE ride_date<?', ((today - timedelta(days=30)).isoformat(),))
+    db().commit()
+    return out
+
+
+def run_notifications(now=None):
+    with _push_actors_lock:
+        actors = set(_push_actors)
+        _push_actors.clear()
+    for uid, message in collect_notifications(now or datetime.now(), actors):
+        deliver(uid, message)
+
+
+def start_push_worker(interval=60):
+    """Achtergrondtaak: elke minuut (en direct na een wijziging) kijken of er meldingen weg moeten."""
+    def loop():
+        while True:
+            _push_event.wait(interval)
+            _push_event.clear()
+            time.sleep(2)      # even wachten zodat meerdere snelle wijzigingen samen één melding geven
+            try:
+                with app.app_context():
+                    run_notifications()
+            except Exception:  # noqa: BLE001 - de taak moet blijven draaien
+                app.logger.exception('Meldingen nalopen mislukt')
+    threading.Thread(target=loop, name='meldingen', daemon=True).start()
+
+
+@app.route('/sw.js')
+def service_worker():
+    resp = send_from_directory(app.static_folder, 'sw.js', mimetype='text/javascript')
+    resp.headers['Service-Worker-Allowed'] = '/'
+    return resp
+
+
+@app.route('/meldingen')
+@login_required
+def notifications_page():
+    count = db().execute('SELECT COUNT(*) FROM push_subscriptions WHERE user_id=?', (g.user['id'],)).fetchone()[0]
+    return render_template('meldingen.html', vapid_public=push.b64u(push.raw_public(vapid_key())), devices=count)
+
+
+@app.post('/meldingen/aan')
+@login_required
+def notifications_on():
+    try:
+        sub = json.loads(request.form.get('subscription', ''))
+        endpoint, keys = sub['endpoint'], sub['keys']
+        p256dh, auth = keys['p256dh'], keys['auth']
+        if not (isinstance(endpoint, str) and valid_push_endpoint(endpoint)):
+            raise ValueError('onbekende push-dienst')
+        if len(push.b64u_decode(p256dh)) != 65 or len(push.b64u_decode(auth)) < 16:
+            raise ValueError('ongeldige sleutels')
+    except (ValueError, KeyError, TypeError, AttributeError):
+        return {'ok': False, 'error': 'Dit abonnement kan niet worden opgeslagen.'}, 400
+    db().execute('INSERT INTO push_subscriptions(user_id,endpoint,p256dh,auth,device,created_at) VALUES (?,?,?,?,?,?) '
+                 'ON CONFLICT(endpoint) DO UPDATE SET user_id=excluded.user_id, p256dh=excluded.p256dh, auth=excluded.auth',
+                 (g.user['id'], endpoint, p256dh, auth, client_device(), datetime.now().isoformat(timespec='seconds')))
+    # Startpunt: de huidige planning is 'bekend', zodat je niet meteen een stapel meldingen krijgt.
+    for d in plan_for(date.today() + PUSH_HORIZON):
+        if not d['done'] and d['date'] >= date.today():
+            db().execute('INSERT OR IGNORE INTO push_known(user_id,ride_date,driver_id) VALUES (?,?,?)',
+                         (g.user['id'], d['iso'], d['driver']))
+    db().commit()
+    audit('push_on', client_device())
+    return {'ok': True}
+
+
+@app.post('/meldingen/uit')
+@login_required
+def notifications_off():
+    db().execute('DELETE FROM push_subscriptions WHERE user_id=? AND endpoint=?',
+                 (g.user['id'], request.form.get('endpoint', '')))
+    db().commit()
+    audit('push_off', client_device())
+    return {'ok': True}
+
+
+@app.post('/meldingen/test')
+@login_required
+def notifications_test():
+    sent = deliver(g.user['id'], {'title': '🔔 Het werkt!', 'body': 'Je krijgt nu meldingen van Meerijden.', 'url': '/',
+                                  'tag': 'test'})
+    return {'ok': bool(sent), 'sent': sent}
 
 
 if __name__ == '__main__':

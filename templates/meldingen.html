@@ -1,0 +1,114 @@
+{% extends 'base.html' %}
+{% block content %}
+<a class="back" href="{{ url_for('index') }}">← Terug naar planning</a>
+<h1>Meldingen</h1>
+<p class="lead">Krijg een melding op je telefoon, ook als de app dicht is.</p>
+
+<section class="card push-card" id="push" data-key="{{ vapid_public }}" data-csrf="{{ csrf }}">
+  <h2>Op dit apparaat</h2>
+  <p class="push-status" id="push-status">Even kijken…</p>
+
+  <div class="push-ios" id="push-ios" hidden>
+    <p><strong>iPhone of iPad?</strong> Meldingen werken daar alleen als de app op je beginscherm staat:</p>
+    <ol>
+      <li>Open deze pagina in <strong>Safari</strong>.</li>
+      <li>Tik op <strong>Deel</strong> (het vierkantje met de pijl omhoog) en kies <strong>Zet op beginscherm</strong>.</li>
+      <li>Open <strong>Meerijden</strong> vanaf je beginscherm, ga naar Meldingen en tik op <strong>Meldingen aanzetten</strong>.</li>
+    </ol>
+  </div>
+
+  <div class="push-buttons">
+    <button type="button" class="primary full" id="push-on" hidden>🔔 Meldingen aanzetten</button>
+    <button type="button" class="secondary full" id="push-test" hidden>Testmelding sturen</button>
+    <button type="button" class="linkbtn" id="push-off" hidden>Meldingen uitzetten op dit apparaat</button>
+  </div>
+  {% if devices %}<p class="muted minor">Meldingen staan aan op {{ devices }} apparaat{{ 'en' if devices > 1 }} van jou.</p>{% endif %}
+</section>
+
+<section class="card push-card">
+  <h2>Wanneer krijg je een melding?</h2>
+  <ul class="cal-list">
+    <li><strong>Planning gewijzigd:</strong> als jij ineens moet rijden, of juist niet meer.</li>
+    <li><strong>De avond ervoor</strong> (vanaf 19:00): wie er morgen rijdt, of de vraag of je morgen gaat als je dat nog niet hebt ingevuld.</li>
+    <li><strong>Na de rit</strong> (vanaf 17:30): de vraag wie er gereden heeft, als dat nog niet is ingevuld.</li>
+    <li><strong>Extra dag:</strong> als een collega een extra dag toevoegt.</li>
+  </ul>
+  <p class="muted minor">Wat je zelf aanpast, krijg je niet nog eens als melding.</p>
+</section>
+
+<script nonce="{{ csp_nonce }}">
+(function () {
+  var box = document.getElementById('push'), statusEl = document.getElementById('push-status');
+  var btnOn = document.getElementById('push-on'), btnTest = document.getElementById('push-test'), btnOff = document.getElementById('push-off');
+  var csrf = box.dataset.csrf, key = box.dataset.key;
+  var ios = /iPhone|iPad|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+  var standalone = window.matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
+
+  function say(text) { statusEl.textContent = text; }
+  function show(on, test, off) { btnOn.hidden = !on; btnTest.hidden = !test; btnOff.hidden = !off; }
+  function keyBytes(b64) {
+    var pad = '='.repeat((4 - b64.length % 4) % 4), raw = atob((b64 + pad).replace(/-/g, '+').replace(/_/g, '/'));
+    var out = new Uint8Array(raw.length);
+    for (var i = 0; i < raw.length; i++) out[i] = raw.charCodeAt(i);
+    return out;
+  }
+  function post(url, data) {
+    data.csrf = csrf;
+    return fetch(url, { method: 'POST', credentials: 'same-origin', body: new URLSearchParams(data) })
+      .then(function (r) { return r.json(); });
+  }
+  function registration() { return navigator.serviceWorker.register('/sw.js').then(function () { return navigator.serviceWorker.ready; }); }
+
+  function refresh() {
+    if (!('serviceWorker' in navigator) || !('PushManager' in window) || !('Notification' in window)) {
+      if (ios && !standalone) { document.getElementById('push-ios').hidden = false; say('Zet de app eerst op je beginscherm (zie hieronder).'); }
+      else say('Deze browser kan helaas geen meldingen ontvangen. Probeer Chrome, Edge, Firefox of Safari.');
+      show(false, false, false);
+      return;
+    }
+    if (Notification.permission === 'denied') {
+      say('Meldingen zijn geblokkeerd voor deze site. Zet ze aan in de instellingen van je browser of telefoon (bij Meerijden of carpool.rwict.nl) en laad deze pagina opnieuw.');
+      show(false, false, false);
+      return;
+    }
+    registration().then(function (reg) { return reg.pushManager.getSubscription(); }).then(function (sub) {
+      if (sub) { say('✓ Meldingen staan aan op dit apparaat.'); show(false, true, true); }
+      else { say('Meldingen staan uit op dit apparaat.'); show(true, false, false); }
+    }).catch(function () { say('Meldingen konden niet worden gecontroleerd. Laad de pagina opnieuw.'); });
+  }
+
+  btnOn.addEventListener('click', function () {
+    btnOn.disabled = true; say('Even geduld… je telefoon vraagt misschien om toestemming.');
+    Notification.requestPermission().then(function (perm) {
+      if (perm !== 'granted') throw new Error('geen toestemming');
+      return registration();
+    }).then(function (reg) {
+      return reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: keyBytes(key) });
+    }).then(function (sub) {
+      return post('/meldingen/aan', { subscription: JSON.stringify(sub) });
+    }).then(function (res) {
+      if (!res.ok) throw new Error(res.error || 'opslaan mislukt');
+      return post('/meldingen/test', {});
+    }).then(function () { refresh(); })
+      .catch(function (e) { say('Aanzetten is niet gelukt (' + e.message + '). Probeer het nog eens.'); })
+      .then(function () { btnOn.disabled = false; });
+  });
+
+  btnTest.addEventListener('click', function () {
+    say('Testmelding wordt verstuurd…');
+    post('/meldingen/test', {}).then(function (res) {
+      say(res.ok ? '✓ Testmelding verstuurd. Zie je hem niet? Kijk of meldingen voor je browser aan staan.' : 'Versturen lukte niet. Zet meldingen uit en weer aan.');
+    }).catch(function () { say('Versturen lukte niet.'); });
+  });
+
+  btnOff.addEventListener('click', function () {
+    registration().then(function (reg) { return reg.pushManager.getSubscription(); }).then(function (sub) {
+      if (!sub) return;
+      return post('/meldingen/uit', { endpoint: sub.endpoint }).then(function () { return sub.unsubscribe(); });
+    }).then(refresh);
+  });
+
+  refresh();
+})();
+</script>
+{% endblock %}
