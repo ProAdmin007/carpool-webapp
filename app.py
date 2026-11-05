@@ -467,7 +467,7 @@ AUDIT_ACTIONS = {   # actie: (categorie, omschrijving)
     'ride_undo': ('Ritten', 'Rit ongedaan gemaakt'),
     'no_ride': ('Ritten', 'Niet gereden'),
     'extra_day_add': ('Ritten', 'Extra dag toegevoegd'),
-    'extra_day_remove': ('Ritten', 'Extra dag weggehaald'),
+    'extra_day_remove': ('Ritten', 'Extra dag verwijderd'),
     'settings_days': ('Instellingen', 'Carpooldagen gewijzigd'),
     'settings_count_from': ('Instellingen', 'Startdatum telling gewijzigd'),
     'user_add': ('Instellingen', 'Collega toegevoegd'),
@@ -606,6 +606,7 @@ def index():
     extra_invites = [d for d in coming if d['extra'] and d['extra_by'] != g.user['id']
                      and g.user['id'] not in d['responses']]
     return render_template('index.html', days=display, users=users, extra_invites=extra_invites,
+                           upcoming_extra=[d for d in coming if d['extra']],
                            max_extra=(today + timedelta(days=365)).isoformat(),
                            names={u['id']: u['name'] for u in users}, ledger=stats(),
                            since=date.fromisoformat(count_from()) if count_from() else None,
@@ -802,7 +803,7 @@ def remove_extra_day(ride_date):
         flash('Deze extra dag bestaat niet (meer).', 'error')
         return redirect(url_for('index'))
     if d < date.today() or db().execute('SELECT 1 FROM rides WHERE ride_date=?', (ride_date,)).fetchone():
-        abort(400, 'Een extra dag die al voorbij of afgerond is, kun je niet meer weghalen.')
+        abort(400, 'Een extra dag die al voorbij of afgerond is, kun je niet meer verwijderen.')
     others = db().execute('SELECT COUNT(*) FROM attendance WHERE ride_date=? AND going=1 AND user_id!=?',
                           (ride_date, g.user['id'])).fetchone()[0]
     if others and not g.user['is_admin']:
@@ -812,7 +813,7 @@ def remove_extra_day(ride_date):
         db().execute(f'DELETE FROM {table} WHERE ride_date=?', (ride_date,))  # nosec B608 - vaste tabelnamen
     db().commit()
     audit('extra_day_remove', fmt(d))
-    flash(f'{fmt(d)} is weggehaald.', 'success')
+    flash(f'{fmt(d)} is verwijderd.', 'success')
     return redirect(url_for('index', week=request.form.get('week', 0)))
 
 

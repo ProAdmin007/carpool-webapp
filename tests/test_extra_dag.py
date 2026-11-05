@@ -71,17 +71,35 @@ def test_weghalen_alleen_zolang_niemand_anders_meegaat():
         assert A.db().execute('SELECT COUNT(*) FROM attendance WHERE ride_date=?', (FRI.isoformat(),)).fetchone()[0] == 0
     assert post(bas, f'/attendance/{FRI}', going='1').status_code == 400
     actions = [r for r in text(login('Anna')[0].get('/audit')).split('audit-row')]
-    assert any('Extra dag toegevoegd' in a for a in actions) and any('Extra dag weggehaald' in a for a in actions)
+    assert any('Extra dag toegevoegd' in a for a in actions) and any('Extra dag verwijderd' in a for a in actions)
 
 
 def test_beheerder_mag_altijd_weghalen():
     fresh()
     bas, _ = login('Bas')
     post(bas, '/extra-day', day=FRI.isoformat())
+    chris, _ = login('Chris')
+    post(chris, f'/attendance/{FRI}', going='1')
     anna, _ = login('Anna')
-    assert 'Extra dag weghalen' in text(anna.get('/?week=1')) + text(anna.get('/?week=2')) + text(anna.get('/'))
+    page = text(anna.get('/'))
+    # Bovenaan in het Extra dag-paneel: lijst met verwijderknop en een bevestigingsvraag die waarschuwt
+    assert 'Geplande extra dagen' in page and '1 gepland' in page
+    assert f'/extra-day/{FRI}/remove' in page and 'Weet je zeker dat je de extra dag op vrijdag' in page
+    assert 'Bas en Chris gaan al mee en krijgen dan geen rit' in page
     post(anna, f'/extra-day/{FRI}/remove')
     assert extra_rows() == []
+
+
+def test_verwijderknop_bovenaan_voor_wie_hem_toevoegde():
+    fresh()
+    bas, _ = login('Bas')
+    post(bas, '/extra-day', day=FRI.isoformat())
+    page = text(bas.get('/'))
+    assert 'Geplande extra dagen' in page and 'data-confirm="Weet je zeker dat je de extra dag op vrijdag' in page
+    chris, _ = login('Chris')
+    post(chris, f'/attendance/{FRI}', going='1')
+    page = text(bas.get('/'))
+    assert f'/extra-day/{FRI}/remove' not in page and 'Chris gaat al mee' in page
 
 
 def test_afgeronde_extra_dag_telt_mee_en_blijft_staan():

@@ -93,8 +93,21 @@
 </section>
 {% endif %}
 
+{% macro remove_extra_form(day, week=0) %}
+  {#- Verwijderen kan zolang er nog niemand anders meegaat; de beheerder kan het altijd. -#}
+  {% set others_going = day.present|rejectattr('id', 'equalto', me.id)|map(attribute='name')|list %}
+  {% if me.is_admin or not others_going %}
+  <form method="post" action="{{ url_for('remove_extra_day', ride_date=day.iso) }}" class="remove-extra"
+        data-confirm="Weet je zeker dat je de extra dag op {{ day.label|lower }} wilt verwijderen?{% if others_going %} {{ others_going|join(' en ') }} {{ 'gaat' if others_going|length == 1 else 'gaan' }} al mee en {{ 'krijgt' if others_going|length == 1 else 'krijgen' }} dan geen rit.{% endif %}">
+    <input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="week" value="{{ week }}">
+    <button class="remove-btn">Verwijderen</button>
+  </form>
+  {% else %}
+  <span class="muted remove-no">{{ others_going|join(' en ') }} {{ 'gaat' if others_going|length == 1 else 'gaan' }} al mee</span>
+  {% endif %}
+{% endmacro %}
 <details class="extra-day" id="extra-day">
-  <summary>＋ Extra dag carpoolen</summary>
+  <summary>＋ Extra dag carpoolen{% if upcoming_extra %} <span class="extra-count">· {{ upcoming_extra|length }} gepland</span>{% endif %}</summary>
   <div class="extra-body">
     <p class="muted minor">Bijvoorbeeld een vrijdag. Kies de datum: jij gaat dan mee en je collega's krijgen een melding met de vraag of ze ook gaan.</p>
     <form method="post" action="{{ url_for('add_extra_day') }}" class="extra-form">
@@ -102,6 +115,18 @@
       <input type="date" name="day" required min="{{ today.isoformat() }}" max="{{ max_extra }}" aria-label="Datum">
       <button class="primary">Toevoegen</button>
     </form>
+    {% if upcoming_extra %}
+    <p class="extra-list-title">Geplande extra dagen</p>
+    <ul class="extra-list">
+      {% for d in upcoming_extra %}
+      <li>
+        <a href="{{ url_for('index', week=week_of(d.date)) }}#day-{{ d.iso }}"><strong>{{ weekdays[d.date.weekday()][:2] }} {{ short(d.date) }}</strong>
+          <small class="muted">{{ d.present|length }} {{ 'gaat' if d.present|length == 1 else 'gaan' }}</small></a>
+        {{ remove_extra_form(d) }}
+      </li>
+      {% endfor %}
+    </ul>
+    {% endif %}
   </div>
 </details>
 
@@ -230,13 +255,7 @@
     {% endif %}
 
     {% if day.extra and not day.done and not day.past %}
-    {% set others_going = day.present|rejectattr('id', 'equalto', me.id)|list %}
-    {% if me.is_admin or not others_going %}
-    <form method="post" action="{{ url_for('remove_extra_day', ride_date=day.iso) }}" data-confirm="Extra dag {{ day.label|lower }} weghalen?" class="undo">
-      <input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="week" value="{{ offset }}">
-      <button class="linkbtn">Extra dag weghalen</button>
-    </form>
-    {% endif %}
+    <div class="day-extra-remove"><span class="muted">Extra dag{% if day.extra_by %}, toegevoegd door {{ 'jou' if day.extra_by == me.id else names.get(day.extra_by, 'een collega') }}{% endif %}</span>{{ remove_extra_form(day, offset) }}</div>
     {% endif %}
   </article>
 {% else %}

@@ -58,6 +58,16 @@ table.scoreboard{border-collapse:collapse;font-size:13px}
 .extra-day[open] summary{background:var(--soft);border-radius:14px 14px 0 0}
 .extra-body{background:var(--surface);border:1.5px solid var(--accent);border-top:0;border-radius:0 0 14px 14px;padding:4px 16px 16px}
 .extra-body p{margin:10px 0 12px}
+.extra-count{font-weight:600;color:var(--text-2)}
+.extra-list-title{margin:16px 0 4px!important;font-size:12px;font-weight:750;color:var(--text)}
+.extra-list{list-style:none;margin:0;padding:0}
+.extra-list li{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:9px 0;border-top:1px solid var(--border)}
+.extra-list li a{display:flex;flex-direction:column;gap:2px;font-size:14px;min-width:0}
+.remove-extra{margin:0}
+.remove-btn{background:var(--surface);color:var(--error-text);border:1.5px solid var(--error-border);border-radius:10px;padding:8px 12px;font-size:12.5px;font-weight:750;white-space:nowrap}
+.remove-btn:hover{background:var(--error)}
+.remove-no{font-size:12px;text-align:right}
+.day-extra-remove{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:16px;padding-top:14px;border-top:1px solid var(--border);font-size:12px}
 .extra-form{display:flex;gap:10px;flex-wrap:wrap}
 .extra-form input[type=date]{flex:1 1 160px;min-width:0}
 
