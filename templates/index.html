@@ -16,6 +16,13 @@
   <small>Anders telt deze rit niet mee voor de chauffeur. Tik hier om het in te vullen.</small></span>
 </a>
 {% endfor %}
+{% for day in extra_invites %}
+<a class="notice info" href="{{ url_for('index', week=week_of(day.date)) }}#day-{{ day.iso }}">
+  <span class="notice-icon">＋</span>
+  <span><strong>{{ names.get(day.extra_by, 'Iemand') }} wil ook op {{ day.label|lower }} carpoolen.</strong><br>
+  <small>Ga je mee? Tik hier om het in te vullen.</small></span>
+</a>
+{% endfor %}
 {% macro solo_text(day, cap=false) -%}
   {{- "Alleen" if cap else "alleen" }} {% if day.present[0].id == me.id %}jij gaat{% else %}{{ day.present[0].name }} gaat{% endif -%}
 {%- endmacro %}
@@ -98,6 +105,7 @@
     </a></li>
   {% endfor %}
   </ul>
+  <a class="extra-link" href="#extra-day">＋ Extra dag carpoolen</a>
 </section>
 {% endif %}
 
@@ -112,7 +120,7 @@
   <article class="card day {% if day.today %}is-today{% endif %}" id="day-{{ day.iso }}">
     <div class="day-top">
       <div>
-        <span class="eyebrow">{{ 'Vandaag' if day.today else ('Afgerond' if day.done else ('Geweest' if day.past else 'Kantoordag')) }}</span>
+        <span class="eyebrow">{{ 'Vandaag' if day.today else ('Afgerond' if day.done else ('Geweest' if day.past else ('Extra dag' if day.extra else 'Kantoordag'))) }}</span>
         <h2>{{ day.label }}</h2>
       </div>
       {% if day.done %}{% if since and day.date < since %}<span class="status">Telt niet mee</span>{% else %}<span class="status completed">Afgerond</span>{% endif %}
@@ -209,11 +217,31 @@
       <button class="linkbtn">Klopt niet? Ongedaan maken</button>
     </form>
     {% endif %}
+
+    {% if day.extra and not day.done and not day.past %}
+    {% set others_going = day.present|rejectattr('id', 'equalto', me.id)|list %}
+    {% if me.is_admin or not others_going %}
+    <form method="post" action="{{ url_for('remove_extra_day', ride_date=day.iso) }}" data-confirm="Extra dag {{ day.label|lower }} weghalen?" class="undo">
+      <input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="week" value="{{ offset }}">
+      <button class="linkbtn">Extra dag weghalen</button>
+    </form>
+    {% endif %}
+    {% endif %}
   </article>
 {% else %}
-  <section class="card"><h2>Geen carpooldagen in deze periode</h2><p>De beheerder kan extra dagen instellen via Instellingen.</p></section>
+  <section class="card"><h2>Geen carpooldagen in deze periode</h2><p>Wil je toch samen rijden? Voeg hieronder een extra dag toe.</p></section>
 {% endfor %}
 </div>
+
+<details class="card extra-day" id="extra-day">
+  <summary>＋ Extra dag carpoolen? <span class="muted">Bijvoorbeeld een vrijdag</span></summary>
+  <p class="muted minor">Kies de datum. Jij gaat dan mee en je collega's krijgen een melding met de vraag of ze ook gaan.</p>
+  <form method="post" action="{{ url_for('add_extra_day') }}" class="extra-form">
+    <input type="hidden" name="csrf" value="{{ csrf }}">
+    <input type="date" name="day" required min="{{ today.isoformat() }}" max="{{ max_extra }}" aria-label="Datum">
+    <button class="primary">Toevoegen</button>
+  </form>
+</details>
 
 <details class="card stats-more">
   <summary>Hoe wordt dit bepaald? <span class="muted">Bekijk de stand</span></summary>
@@ -238,6 +266,14 @@
 <p class="footnote">Tip: vul alvast volgende week in. De geplande chauffeur kan nog veranderen als iemand zijn aanwezigheid aanpast of een rit wordt afgerond.</p>
 
 <script nonce="{{ csp_nonce }}">
+// Link naar "Extra dag": formulier openklappen en datumveld kiezen.
+function openExtra() {
+  var box = document.getElementById("extra-day");
+  if (box && location.hash === "#extra-day") { box.open = true; var i = box.querySelector("input[type=date]"); if (i) i.focus(); }
+}
+window.addEventListener("hashchange", openExtra);
+openExtra();
+document.querySelectorAll("a[href=\"#extra-day\"]").forEach(function (a) { a.addEventListener("click", function () { setTimeout(openExtra, 0); }); });
 // Wie rijdt, kan niet ook meerijden: vinkje bij de chauffeur automatisch uitzetten.
 document.querySelectorAll('.finish-form').forEach(function (form) {
   function sync() {

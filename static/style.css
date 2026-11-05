@@ -50,6 +50,12 @@ table.scoreboard{border-collapse:collapse;font-size:13px}
 .stats-more table{margin-top:14px}
 .stats-more .how{margin-top:12px}
 .stats-more .how p{margin:0 0 6px}
+.extra-day{margin-top:14px;padding:16px 24px}
+.extra-day summary{cursor:pointer;font-weight:750;font-size:14px}
+.extra-day summary .muted{font-weight:400;margin-left:6px}
+.extra-day p{margin:12px 0 10px}
+.extra-form{display:flex;gap:10px;flex-wrap:wrap}
+.extra-form input[type=date]{flex:1 1 160px;min-width:0}
 
 /* Bovenaan: volgende rit + korte agenda, zodat alles op een telefoonscherm past */
 .next-ride{margin-bottom:12px;padding:18px 20px;border-color:var(--soft-border)}
@@ -112,6 +118,7 @@ table.scoreboard{border-collapse:collapse;font-size:13px}
 /* Agenda-snelknop en feedback */
 .agenda-head{display:flex;justify-content:space-between;align-items:center;gap:10px}
 .cal-quick{font-size:12.5px;font-weight:750;color:var(--accent-text);background:var(--soft);border:1.5px solid var(--accent);border-radius:30px;padding:6px 12px;white-space:nowrap}
+.extra-link{display:block;margin-top:10px;font-size:13px;font-weight:700;color:var(--accent-text);text-align:center;padding:6px}
 .cal-quick:hover{background:var(--accent);color:#fff}
 .badge{display:inline-grid;place-items:center;min-width:18px;height:18px;padding:0 5px;border-radius:9px;background:#e5484d;color:#fff;font-size:11px;font-weight:800;vertical-align:1px}
 textarea{width:100%;border:1px solid var(--border);border-radius:10px;padding:12px;font:inherit;font-weight:400;background:var(--surface);color:var(--text);resize:vertical;outline-color:var(--accent)}

@@ -120,6 +120,11 @@ def init_db():
           device TEXT NOT NULL DEFAULT ''
         );
         CREATE INDEX IF NOT EXISTS audit_log_at ON audit_log(at);
+        CREATE TABLE IF NOT EXISTS extra_days (
+          ride_date TEXT PRIMARY KEY,
+          created_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+          created_at TEXT NOT NULL
+        );
         CREATE TABLE IF NOT EXISTS settings (
           key TEXT PRIMARY KEY,
           value TEXT NOT NULL
@@ -309,6 +314,15 @@ def enabled_days():
     return set(int(x) for x in row['value'].split(','))
 
 
+def extra_days():
+    """Losse extra carpooldagen die iemand heeft toegevoegd: {datum: id van wie hem toevoegde}."""
+    return {r['ride_date']: r['created_by'] for r in db().execute('SELECT ride_date, created_by FROM extra_days')}
+
+
+def is_carpool_day(d):
+    return d.weekday() in enabled_days() or d.isoformat() in extra_days()
+
+
 def fmt(d):
     return f'{WEEKDAYS[d.weekday()]} {d.day} {MONTHS[d.month]}'
 
@@ -386,15 +400,17 @@ def plan_for(end):
     since = count_from()
     today = date.today()
     active = enabled_days()
+    extra = extra_days()
     first = min([date.fromisoformat(d) for d in rides] + [monday(today) - timedelta(weeks=1)])
     days = []
     d = first
     while d <= end:
         iso = d.isoformat()
         ride = rides.get(iso)
-        if ride or d.weekday() in active:
+        if ride or d.weekday() in active or iso in extra:
             present = [u for u in users if attendance[iso].get(u['id']) == 1]
             info = {'date': d, 'iso': iso, 'label': fmt(d), 'present': present,
+                    'extra': iso in extra and d.weekday() not in active, 'extra_by': extra.get(iso),
                     'responses': attendance[iso], 'done': ride is not None,
                     'past': d < today, 'today': d == today,
                     'can_confirm': d <= today and not ride}
@@ -450,6 +466,8 @@ AUDIT_ACTIONS = {   # actie: (categorie, omschrijving)
     'ride_confirm': ('Ritten', 'Rit afgerond'),
     'ride_undo': ('Ritten', 'Rit ongedaan gemaakt'),
     'no_ride': ('Ritten', 'Niet gereden'),
+    'extra_day_add': ('Ritten', 'Extra dag toegevoegd'),
+    'extra_day_remove': ('Ritten', 'Extra dag weggehaald'),
     'settings_days': ('Instellingen', 'Carpooldagen gewijzigd'),
     'settings_count_from': ('Instellingen', 'Startdatum telling gewijzigd'),
     'user_add': ('Instellingen', 'Collega toegevoegd'),
@@ -584,7 +602,11 @@ def index():
     display = [dict(d, changed=d['iso'] in changed) for d in plan if start <= d['date'] <= end]
     coming = [d for d in plan if d['date'] >= today and not d['done']]
     users = all_users()
-    return render_template('index.html', days=display, users=users,
+    # Nieuwe extra dagen van een ander waarop jij nog niet hebt gereageerd.
+    extra_invites = [d for d in coming if d['extra'] and d['extra_by'] != g.user['id']
+                     and g.user['id'] not in d['responses']]
+    return render_template('index.html', days=display, users=users, extra_invites=extra_invites,
+                           max_extra=(today + timedelta(days=365)).isoformat(),
                            names={u['id']: u['name'] for u in users}, ledger=stats(),
                            since=date.fromisoformat(count_from()) if count_from() else None,
                            offset=offset, week_start=start, week_end=end,
@@ -647,7 +669,7 @@ def parse_day(raw):
 
 def valid_day(raw):
     d = parse_day(raw)
-    if d.weekday() not in enabled_days():
+    if not is_carpool_day(d):
         abort(400, 'Dit is geen ingestelde carpooldag.')
     if not date.today() - timedelta(days=90) <= d <= date.today() + timedelta(days=365):
         abort(400, 'Datum buiten het toegestane bereik.')
@@ -735,6 +757,63 @@ def no_ride(ride_date):
     audit('no_ride', fmt(d))
     flash(f'Opgeslagen: op {fmt(d).lower()} is niet gereden.', 'success')
     return back_to(ride_date)
+
+
+MAX_EXTRA_DAYS = 30   # hoeveel toekomstige extra dagen er tegelijk mogen zijn (tegen per ongeluk spammen)
+
+
+@app.post('/extra-day')
+@login_required
+def add_extra_day():
+    """Iedereen kan een losse extra carpooldag toevoegen; wie hem toevoegt gaat zelf mee."""
+    raw = request.form.get('day', '')
+    try:
+        d = date.fromisoformat(raw)
+    except ValueError:
+        flash('Kies een datum.', 'error')
+        return redirect(url_for('index') + '#extra-day')
+    today = date.today()
+    if not today <= d <= today + timedelta(days=365):
+        flash('Kies een datum vanaf vandaag en binnen een jaar.', 'error')
+        return redirect(url_for('index') + '#extra-day')
+    week = (monday(d) - monday(today)).days // 7
+    if is_carpool_day(d):
+        flash(f'{fmt(d)} is al een carpooldag.', 'success')
+        return redirect(url_for('index', week=week) + f'#day-{d.isoformat()}')
+    if db().execute('SELECT COUNT(*) FROM extra_days WHERE ride_date>=?', (today.isoformat(),)).fetchone()[0] >= MAX_EXTRA_DAYS:
+        flash('Er staan al heel veel extra dagen gepland. Haal er eerst een paar weg.', 'error')
+        return redirect(url_for('index') + '#extra-day')
+    db().execute('INSERT OR IGNORE INTO extra_days(ride_date,created_by,created_at) VALUES (?,?,?)',
+                 (d.isoformat(), g.user['id'], datetime.now().isoformat(timespec='seconds')))
+    db().execute('INSERT INTO attendance(user_id,ride_date,going) VALUES (?,?,1) '
+                 'ON CONFLICT(user_id,ride_date) DO UPDATE SET going=1', (g.user['id'], d.isoformat()))
+    db().commit()
+    audit('extra_day_add', fmt(d))
+    flash(f'{fmt(d)} is toegevoegd en jij gaat mee. Je collega\'s zien een melding.', 'success')
+    return redirect(url_for('index', week=week) + f'#day-{d.isoformat()}')
+
+
+@app.post('/extra-day/<ride_date>/remove')
+@login_required
+def remove_extra_day(ride_date):
+    """Extra dag weghalen: kan zolang er nog niemand anders 'ja' heeft gezegd (beheerder altijd)."""
+    d = parse_day(ride_date)
+    if not db().execute('SELECT 1 FROM extra_days WHERE ride_date=?', (ride_date,)).fetchone():
+        flash('Deze extra dag bestaat niet (meer).', 'error')
+        return redirect(url_for('index'))
+    if d < date.today() or db().execute('SELECT 1 FROM rides WHERE ride_date=?', (ride_date,)).fetchone():
+        abort(400, 'Een extra dag die al voorbij of afgerond is, kun je niet meer weghalen.')
+    others = db().execute('SELECT COUNT(*) FROM attendance WHERE ride_date=? AND going=1 AND user_id!=?',
+                          (ride_date, g.user['id'])).fetchone()[0]
+    if others and not g.user['is_admin']:
+        flash('Er gaan al collega\'s mee, dus de dag blijft staan. Kun je zelf niet? Kies dan "Nee".', 'error')
+        return back_to(ride_date)
+    for table in ('extra_days', 'attendance', 'seen_plan'):
+        db().execute(f'DELETE FROM {table} WHERE ride_date=?', (ride_date,))  # nosec B608 - vaste tabelnamen
+    db().commit()
+    audit('extra_day_remove', fmt(d))
+    flash(f'{fmt(d)} is weggehaald.', 'success')
+    return redirect(url_for('index', week=request.form.get('week', 0)))
 
 
 @app.post('/undo/<ride_date>')
