@@ -155,6 +155,23 @@
 
 <div class="cards">
 {% for day in days %}
+  {% if day.done %}
+  {#- Afgeronde rit: compact, één kaartje met wie reed en wie mee was. -#}
+  <article class="card day day-done" id="day-{{ day.iso }}">
+    <span class="done-check">✓</span>
+    <div class="done-main">
+      <strong>{{ weekdays[day.date.weekday()] }} {{ short(day.date) }}</strong>
+      <small>{% if day.driver == me.id %}Jij reed{% else %}{{ names.get(day.driver, '?') }} reed{% endif %}{% if day.passengers %} · mee: {{ day.passengers|map(attribute='name')|join(', ') }}{% else %} alleen{% endif %}</small>
+    </div>
+    <div class="done-side">
+      {% if since and day.date < since %}<span class="status">Telt niet mee</span>{% else %}<span class="status completed">Afgerond</span>{% endif %}
+      <form method="post" action="{{ url_for('undo', ride_date=day.iso) }}" data-confirm="Rit van {{ day.label }} ongedaan maken?">
+        <input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="week" value="{{ offset }}">
+        <button class="linkbtn done-undo">Ongedaan maken</button>
+      </form>
+    </div>
+  </article>
+  {% else %}
   <article class="card day {% if day.today %}is-today{% endif %}" id="day-{{ day.iso }}">
     <div class="day-top">
       <div>
@@ -249,17 +266,11 @@
     </details>
     {% endif %}
 
-    {% if day.done %}
-    <form method="post" action="{{ url_for('undo', ride_date=day.iso) }}" data-confirm="Rit van {{ day.label }} ongedaan maken?" class="undo">
-      <input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="week" value="{{ offset }}">
-      <button class="linkbtn">Klopt niet? Ongedaan maken</button>
-    </form>
-    {% endif %}
-
     {% if day.extra and not day.done and not day.past %}
     <div class="day-extra-remove"><span class="muted">Extra dag{% if day.extra_by %}, toegevoegd door {{ 'jou' if day.extra_by == me.id else names.get(day.extra_by, 'een collega') }}{% endif %}</span>{{ remove_extra_form(day, offset) }}</div>
     {% endif %}
   </article>
+  {% endif %}
 {% else %}
   <section class="card"><h2>Geen carpooldagen in deze periode</h2><p>Wil je toch samen rijden? Tik bovenaan op <strong>＋ Extra dag carpoolen</strong>.</p></section>
 {% endfor %}
