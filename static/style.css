@@ -109,7 +109,8 @@ table.scoreboard{border-collapse:collapse;font-size:13px}
 
 /* Agenda-snelknop en feedback */
 .agenda-head{display:flex;justify-content:space-between;align-items:center;gap:10px}
-.cal-quick{font-size:12.5px;font-weight:750;color:var(--accent-text);background:var(--soft);border-radius:30px;padding:6px 11px;white-space:nowrap}
+.cal-quick{font-size:12.5px;font-weight:750;color:var(--accent-text);background:var(--soft);border:1.5px solid var(--accent);border-radius:30px;padding:6px 12px;white-space:nowrap}
+.cal-quick:hover{background:var(--accent);color:#fff}
 .badge{display:inline-grid;place-items:center;min-width:18px;height:18px;padding:0 5px;border-radius:9px;background:#e5484d;color:#fff;font-size:11px;font-weight:800;vertical-align:1px}
 textarea{width:100%;border:1px solid var(--border);border-radius:10px;padding:12px;font:inherit;font-weight:400;background:var(--surface);color:var(--text);resize:vertical;outline-color:var(--accent)}
 .footer-fb{display:inline-block;margin-bottom:8px;color:var(--accent-text);font-weight:700}
