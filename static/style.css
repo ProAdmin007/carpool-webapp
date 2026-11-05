@@ -121,3 +121,6 @@ textarea{width:100%;border:1px solid var(--border);border-radius:10px;padding:12
 .fb-msg{white-space:pre-wrap;color:var(--text);margin:6px 0 10px}
 .fb-done{opacity:.55}
 .fb-item .secondary{font-size:12px;padding:8px 12px}
+
+/* iPhone: velden met tekst kleiner dan 16px laten Safari inzoomen (en de pagina blijft dan te breed) */
+@media(max-width:700px){input:not([type=checkbox]):not([type=radio]),select,textarea{font-size:16px}}
