@@ -148,6 +148,8 @@ docker compose cp carpool:/data/backup.sqlite3 ./backup.sqlite3
 - Sla de app + `carpool.sqlite3` op in een persistent volume en maak regelmatig back-ups. Maak een consistente SQLite-back-up (bijvoorbeeld via SQLite `.backup` of Python `sqlite3.Connection.backup`), niet zomaar een kopie tijdens actieve writes.
 - Werk Flask en Waitress periodiek bij.
 
+**Thema:** de app volgt standaard je telefoon of computer: licht of donker, net als je andere apps. Met de knop rechtsboven wissel je tussen ◐ automatisch, ☀️ licht en 🌙 donker; die keuze onthoudt je browser.
+
 ## Zo werkt de planning
 
 1. De beheerder kiest de vaste dagen onder **Instellingen** (standaard maandag en donderdag). Een dag erbij is één vinkje.

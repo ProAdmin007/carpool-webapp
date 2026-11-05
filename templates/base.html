@@ -11,7 +11,7 @@
   <link rel="apple-touch-icon" href="{{ url_for('static', filename='apple-touch-icon.png') }}">
   <link rel="manifest" href="{{ url_for('static', filename='manifest.webmanifest') }}">
   <meta name="apple-mobile-web-app-title" content="Meerijden">
-  <script nonce="{{ csp_nonce }}">try{var t=localStorage.getItem('theme');if(t)document.documentElement.dataset.theme=t}catch(e){}</script>
+  <script nonce="{{ csp_nonce }}">try{var t=localStorage.getItem('themeMode');if(t==='light'||t==='dark')document.documentElement.dataset.theme=t;localStorage.removeItem('theme')}catch(e){}</script>
   <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
 <body>
@@ -27,7 +27,7 @@
         <form method="post" action="{{ url_for('logout') }}"><input type="hidden" name="csrf" value="{{ csrf }}"><button class="nav-btn">Uitloggen</button></form>
       </nav>
       {% endif %}
-      <button type="button" class="theme-btn" id="theme-btn" aria-label="Donkere of lichte modus" title="Donker / licht">&#127769;</button>
+      <button type="button" class="theme-btn" id="theme-btn" aria-label="Thema: automatisch" title="Thema: automatisch">&#9680;</button>
     </div>
   </div>
 </header>
@@ -42,16 +42,36 @@ document.addEventListener('submit', function (e) {
   var msg = e.target.getAttribute && e.target.getAttribute('data-confirm');
   if (msg && !window.confirm(msg)) e.preventDefault();
 });
+// Thema: automatisch (volgt de telefoon, standaard) → licht → donker → automatisch.
 (function () {
   var root = document.documentElement, btn = document.getElementById('theme-btn');
-  function isDark() {
-    return root.dataset.theme ? root.dataset.theme === 'dark' : matchMedia('(prefers-color-scheme: dark)').matches;
+  var modes = {
+    auto: { icon: '&#9680;', label: 'Automatisch (zoals je telefoon)' },
+    light: { icon: '&#9728;&#65039;', label: 'Licht' },
+    dark: { icon: '&#127769;', label: 'Donker' }
+  };
+  var next = { auto: 'light', light: 'dark', dark: 'auto' };
+  var toast, timer;
+  function mode() { return root.dataset.theme || 'auto'; }
+  function show() {
+    var m = modes[mode()];
+    btn.innerHTML = m.icon;
+    btn.title = 'Thema: ' + m.label.toLowerCase();
+    btn.setAttribute('aria-label', 'Thema: ' + m.label.toLowerCase() + '. Tik om te wisselen.');
   }
-  function show() { btn.innerHTML = isDark() ? '&#9728;&#65039;' : '&#127769;'; }
+  function tell(text) {
+    if (!toast) { toast = document.createElement('div'); toast.className = 'theme-toast'; toast.setAttribute('role', 'status'); document.body.appendChild(toast); }
+    toast.textContent = text;
+    toast.classList.add('show');
+    clearTimeout(timer);
+    timer = setTimeout(function () { toast.classList.remove('show'); }, 1800);
+  }
   btn.addEventListener('click', function () {
-    root.dataset.theme = isDark() ? 'light' : 'dark';
-    try { localStorage.setItem('theme', root.dataset.theme); } catch (e) {}
+    var m = next[mode()];
+    if (m === 'auto') delete root.dataset.theme; else root.dataset.theme = m;
+    try { if (m === 'auto') localStorage.removeItem('themeMode'); else localStorage.setItem('themeMode', m); } catch (e) {}
     show();
+    tell('Thema: ' + modes[m].label);
   });
   show();
 })();
