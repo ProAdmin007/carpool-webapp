@@ -19,7 +19,7 @@ def test_eerste_bezoek_geen_wijzigingen():
     fresh()
     everyone_goes(FUT, FUT2)
     c, _ = login('Anna')
-    assert 'Gewijzigd sinds' not in text(c.get('/'))
+    assert 'change-notice' not in text(c.get('/'))
 
 
 def test_wijziging_door_ander_wordt_getoond_en_daarna_weg():
@@ -33,7 +33,7 @@ def test_wijziging_door_ander_wordt_getoond_en_daarna_weg():
     # Anna kan de eerste dag niet: dan rijdt een ander
     post(anna, f'/attendance/{FUT}', going='0')
     page = text(anna.get('/'))
-    assert 'Gewijzigd sinds je laatste bezoek' in page
+    assert 'change-notice' in page and '<strong>Gewijzigd:</strong>' in page
     assert 'jij hoeft niet meer te rijden' in page
     assert 'status changed' in page
     # Bas ziet dat zij nu rijdt
@@ -50,11 +50,11 @@ def test_terug_naar_oude_stand_geen_gewijzigd():
     bas, _ = login('Bas')
     anna.get('/'); bas.get('/')
     post(anna, f'/attendance/{FUT}', going='0')       # per ongeluk Nee...
-    assert 'Gewijzigd sinds' in text(anna.get('/'))
+    assert 'change-notice' in text(anna.get('/'))
     post(anna, f'/attendance/{FUT}', going='1')       # ...en weer Ja
-    assert 'Gewijzigd sinds' not in text(anna.get('/'))
+    assert 'change-notice' not in text(anna.get('/'))
     assert 'status changed' not in text(anna.get('/'))
-    assert 'Gewijzigd sinds' not in text(bas.get('/')), 'Bas heeft de tussenstap nooit gezien'
+    assert 'change-notice' not in text(bas.get('/')), 'Bas heeft de tussenstap nooit gezien'
 
 
 def test_wijziging_verdwijnt_na_24_uur():
@@ -63,11 +63,11 @@ def test_wijziging_verdwijnt_na_24_uur():
     anna, _ = login('Anna')
     anna.get('/')
     post(anna, f'/attendance/{FUT}', going='0')
-    assert 'Gewijzigd sinds' in text(anna.get('/'))
+    assert 'change-notice' in text(anna.get('/'))
     with A.app.app_context():
         A.db().execute("UPDATE seen_plan SET shown_at='2000-01-01T00:00:00' WHERE shown_at IS NOT NULL")
         A.db().commit()
-    assert 'Gewijzigd sinds' not in text(anna.get('/'))
+    assert 'change-notice' not in text(anna.get('/'))
     post(anna, f'/attendance/{FUT}', going='1')       # nu is terugdraaien wél een wijziging
     assert 'jij rijdt nu' in text(anna.get('/'))
 

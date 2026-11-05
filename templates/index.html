@@ -35,20 +35,22 @@
   {% elif c.day.solo %}geen carpool meer, {{ solo_text(c.day) }} (eerst {{ names[c.was] }})
   {% else %}er gaat niemand meer (eerst {{ names[c.was] }}){% endif %}</li>
 {% endmacro %}
+{% macro short_change(c) -%}
+  {#- Kort: dag → nieuwe situatie. De volledige uitleg staat in de uitklaplijst. -#}
+  {{ weekdays[c.day.date.weekday()][:2]|lower }} {{ short(c.day.date) }} →
+  {% if c.now == me.id %}jij rijdt
+  {%- elif c.now %}{{ names[c.now] }} rijdt
+  {%- elif c.day.solo %}geen carpool
+  {%- else %}niemand gaat{% endif %}
+{%- endmacro %}
 {% set mine = (changes|selectattr('now', 'equalto', me.id)|list + changes|selectattr('was', 'equalto', me.id)|list)|sort(attribute='day.iso') %}
 {% set others = changes|reject('in', mine)|list %}
-<div class="notice info">
-  <span class="notice-icon">↻</span>
-  <div><strong>Gewijzigd sinds je laatste bezoek</strong>
-    {% if mine %}<ul>{% for c in mine %}{{ change_line(c) }}{% endfor %}</ul>{% endif %}
-    {% if others %}
-    <details class="more-changes"{% if not mine and others|length <= 2 %} open{% endif %}>
-      <summary>{% if mine %}+ {{ others|length }} andere wijziging{{ 'en' if others|length > 1 }}{% else %}{{ others|length }} wijziging{{ 'en' if others|length > 1 }} bij anderen{% endif %}</summary>
-      <ul>{% for c in others %}{{ change_line(c) }}{% endfor %}</ul>
-    </details>
-    {% endif %}
-  </div>
-</div>
+{% set ordered = mine + others %}
+{#- Eén regel; tik erop voor alle wijzigingen. Jouw eigen wijzigingen staan voorop. -#}
+<details class="notice info change-notice">
+  <summary><span class="notice-icon">↻</span><span class="change-sum"><strong>Gewijzigd:</strong> {{ short_change(ordered[0]) }}</span>{% if ordered|length > 1 %}<span class="change-more">+{{ ordered|length - 1 }}</span>{% endif %}<span class="change-arrow">›</span></summary>
+  <ul>{% for c in ordered %}{{ change_line(c) }}{% endfor %}</ul>
+</details>
 {% endif %}
 
 {% macro my_status(day) %}
