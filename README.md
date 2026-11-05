@@ -158,6 +158,8 @@ docker compose cp carpool:/data/backup.sqlite3 ./backup.sqlite3
 
 Voorbeeld: Anna rijdt met Bas en Chris mee. Anna staat dan op +2, Bas en Chris op −1. Daarna rijdt Bas of Chris. Rijdt Anna alleen met Bas, dan krijgt alleen Bas er −1 bij.
 
+Gaat er op een dag maar één persoon, dan is er geen carpool. De app toont dan **Geen carpool – alleen … gaat**, wijst geen chauffeur aan, vraagt achteraf niet om de rit in te vullen en zet niets in de agenda.
+
 Een dag die al voorbij is en niet is afgerond, telt niet mee. Je kunt hem achteraf nog afronden (tot 90 dagen terug).
 
 **Windows, nog makkelijker:** dubbelklik op `start.bat`. Bij de eerste keer installeert die alles automatisch.

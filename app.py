@@ -389,8 +389,10 @@ def plan_for(end):
                     # Telt niet mee voor het saldo, maar wel voor 'wie reed het langst geleden'.
                     ledger.last[ride['driver']] = iso
             else:
-                info['driver'] = ledger.pick(present) if present else None
-                info['passengers'] = [u for u in present if u['id'] != info['driver']]
+                # Gaat er maar één persoon, dan is er geen carpool: geen chauffeur, telt niet mee.
+                info['solo'] = len(present) == 1
+                info['driver'] = ledger.pick(present) if len(present) > 1 else None
+                info['passengers'] = [u for u in present if u['id'] != info['driver']] if info['driver'] else []
                 if info['driver'] is not None and d >= today:
                     ledger.add(iso, info['driver'], [u['id'] for u in info['passengers']])
             days.append(info)
@@ -611,10 +613,10 @@ def plan_changes(plan, today, horizon):
 
 
 def forgotten_rides(plan, today):
-    """Voorbije dagen waarop iemand zou gaan, maar waarvan nog niet is ingevuld wie reed."""
+    """Voorbije carpooldagen (minstens twee mensen) waarvan nog niet is ingevuld wie reed."""
     since = count_from()
     oldest = today - timedelta(days=90)
-    return [d for d in plan if d['past'] and not d['done'] and d['present']
+    return [d for d in plan if d['past'] and not d['done'] and len(d['present']) > 1
             and d['iso'] >= since and d['date'] >= oldest]
 
 
@@ -857,8 +859,8 @@ def calendar_feed(user):
             summary = '✓ Jij reed' if d['driver'] == me else f"✓ {names.get(d['driver'], '?')} reed (jij reed mee)"
             others = [names[p] for p in passengers if p != me and p in names]
         else:
-            if d['responses'].get(me) != 1:
-                continue      # alleen dagen waarop je gaat
+            if d['responses'].get(me) != 1 or d.get('solo'):
+                continue      # alleen dagen waarop je gaat en er echt gecarpoold wordt
             if d['driver'] == me:
                 summary = '🚗 Jij rijdt'
             elif d['driver']:

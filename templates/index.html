@@ -16,12 +16,16 @@
   <small>Anders telt deze rit niet mee voor de chauffeur. Tik hier om het in te vullen.</small></span>
 </a>
 {% endfor %}
+{% macro solo_text(day, cap=false) -%}
+  {{- "Alleen" if cap else "alleen" }} {% if day.present[0].id == me.id %}jij gaat{% else %}{{ day.present[0].name }} gaat{% endif -%}
+{%- endmacro %}
 {% if changes %}
 {% macro change_line(c) %}
   <li><a href="{{ url_for('index', week=week_of(c.day.date)) }}#day-{{ c.day.iso }}">{{ c.day.label }}</a>:
   {% if c.now == me.id %}<strong>jij rijdt nu</strong> (eerst {{ names[c.was] }})
-  {% elif c.was == me.id %}<strong>jij hoeft niet meer te rijden</strong>, nu {{ names[c.now] if c.now else 'niemand' }}
+  {% elif c.was == me.id %}<strong>jij hoeft niet meer te rijden</strong>, {% if c.now %}nu {{ names[c.now] }}{% elif c.day.solo %}geen carpool ({{ solo_text(c.day) }}){% else %}er gaat niemand{% endif %}
   {% elif c.now %}nu rijdt {{ names[c.now] }} (eerst {{ names[c.was] }})
+  {% elif c.day.solo %}geen carpool meer, {{ solo_text(c.day) }} (eerst {{ names[c.was] }})
   {% else %}er gaat niemand meer (eerst {{ names[c.was] }}){% endif %}</li>
 {% endmacro %}
 {% set mine = (changes|selectattr('now', 'equalto', me.id)|list + changes|selectattr('was', 'equalto', me.id)|list)|sort(attribute='day.iso') %}
@@ -59,10 +63,11 @@
   <div class="next-name">
     {% if nr.driver == me.id %}🚗 Jij rijdt
     {% elif nr.driver %}🚗 {{ names[nr.driver] }} rijdt
+    {% elif nr.solo %}Geen carpool
     {% else %}Nog niemand aangemeld{% endif %}
   </div>
   <p class="next-sub">
-    {% if nr.passengers %}Mee: {{ nr.passengers|map(attribute='name')|join(', ') }}{% elif nr.driver %}Niemand rijdt mee{% endif %}
+    {% if nr.passengers %}Mee: {{ nr.passengers|map(attribute='name')|join(', ') }}{% elif nr.solo %}{{ solo_text(nr, true) }}{% endif %}
     {% set missing = users|rejectattr('id', 'in', nr.responses.keys()|list)|map(attribute='name')|list %}
     {% if missing %}<span class="muted"> · nog niet ingevuld: {{ missing|join(', ') }}</span>{% endif %}
   </p>
@@ -88,7 +93,7 @@
   {% for d in coming %}
     <li><a href="{{ url_for('index', week=week_of(d.date)) }}#day-{{ d.iso }}">
       <span class="ag-date">{{ weekdays[d.date.weekday()][:2] }} {{ short(d.date) }}</span>
-      <span class="ag-driver">{% if d.driver == me.id %}<strong class="ag-me">Jij rijdt</strong>{% elif d.driver %}{{ names[d.driver] }} rijdt{% else %}<span class="muted">nog niemand</span>{% endif %}</span>
+      <span class="ag-driver">{% if d.driver == me.id %}<strong class="ag-me">Jij rijdt</strong>{% elif d.driver %}{{ names[d.driver] }} rijdt{% elif d.solo %}<span class="muted">geen carpool</span>{% else %}<span class="muted">nog niemand</span>{% endif %}</span>
       {{ my_status(d) }}
     </a></li>
   {% endfor %}
@@ -112,11 +117,21 @@
       </div>
       {% if day.done %}{% if since and day.date < since %}<span class="status">Telt niet mee</span>{% else %}<span class="status completed">Afgerond</span>{% endif %}
       {% elif day.past and not day.present %}<span class="status">Niet gereden</span>
+      {% elif day.solo %}<span class="status">Geen carpool</span>
       {% elif day.past %}<span class="status warn">Nog niet ingevuld</span>
       {% elif day.changed %}<span class="status changed">Gewijzigd</span>
       {% else %}<span class="status pending">Gepland</span>{% endif %}
     </div>
 
+    {% if day.solo %}
+    <div class="driver">
+      <span class="driver-icon">–</span>
+      <div>
+        <small>Geen carpool</small>
+        <div class="driver-name">{{ solo_text(day, true) }}</div>
+      </div>
+    </div>
+    {% else %}
     <div class="driver">
       <span class="driver-icon">{{ '✓' if day.done else '🚗' }}</span>
       <div>
@@ -124,6 +139,7 @@
         <div class="driver-name">{% if day.driver %}{{ names[day.driver] }}{% if me.id == day.driver %} (jij){% endif %}{% else %}Nog niet bekend{% endif %}</div>
       </div>
     </div>
+    {% endif %}
 
     <div class="members">
       {% if day.done %}
@@ -154,8 +170,8 @@
     {% endif %}
 
     {% if day.can_confirm %}
-    <details class="finish" {% if day.past and day.present %}open{% endif %}>
-      {% if day.past and not day.present %}
+    <details class="finish" {% if day.past and day.present|length > 1 %}open{% endif %}>
+      {% if day.past and day.present|length < 2 %}
       <summary class="linkbtn finish-small">Toch gereden? Invullen</summary>
       {% else %}
       <summary class="primary full">Rit afronden: wie reed er?</summary>

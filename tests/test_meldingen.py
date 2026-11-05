@@ -85,10 +85,47 @@ def test_vergeten_rit_melding_blijft_tot_ingevuld():
     assert 'Nog invullen' not in text(c.get('/'))
 
 
+def test_alleen_een_persoon_is_geen_carpool():
+    fresh()
+    with A.app.app_context():
+        A.db().execute('INSERT INTO attendance(user_id,ride_date,going) VALUES (2,?,1)', (PAST.isoformat(),))
+        A.db().commit()
+    bas, _ = login('Bas')
+    post(bas, f'/attendance/{FUT}', going='1')
+    page = text(bas.get('/')) + text(bas.get('/?week=-1'))
+    assert 'Nog invullen' not in page, 'alleen gereden hoeft niet ingevuld te worden'
+    assert 'Geen carpool' in page and 'Alleen jij gaat' in page
+    assert 'Jij rijdt' not in page and 'Bas (jij)' not in page
+    anna, _ = login('Anna')
+    page = text(anna.get('/'))
+    assert 'Alleen Bas gaat' in page and 'Bas rijdt' not in page
+    with A.app.test_request_context():
+        token = A.calendar_token(A.find_user('Bas'))
+    assert 'BEGIN:VEVENT' not in text(bas.get(f'/agenda/{token}.ics')), 'geen carpool, geen agenda-afspraak'
+    # Gaat er iemand bij, dan is het weer een gewone carpooldag
+    post(anna, f'/attendance/{FUT}', going='1')
+    page = text(anna.get('/'))
+    assert 'Geen carpool' not in page.split('class="toolbar"')[0]
+
+
+def test_wordt_het_een_solodag_dan_zegt_de_melding_dat():
+    fresh()
+    for name in ('Anna', 'Bas'):
+        c, _ = login(name)
+        post(c, f'/attendance/{FUT}', going='1')
+    anna, _ = login('Anna')
+    assert 'Anna (jij)' in text(anna.get('/'))
+    bas, _ = login('Bas')
+    post(bas, f'/attendance/{FUT}', going='0')
+    page = text(anna.get('/'))
+    assert 'jij hoeft niet meer te rijden</strong>, geen carpool (alleen jij gaat)' in page
+
+
 def test_er_is_niet_gereden_haalt_melding_weg():
     fresh()
     with A.app.app_context():
-        A.db().execute('INSERT INTO attendance(user_id,ride_date,going) VALUES (1,?,1)', (PAST.isoformat(),))
+        for uid in (1, 2):
+            A.db().execute('INSERT INTO attendance(user_id,ride_date,going) VALUES (?,?,1)', (uid, PAST.isoformat()))
         A.db().commit()
     c, _ = login('Bas')
     assert 'Nog invullen' in text(c.get('/'))
