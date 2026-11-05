@@ -1,0 +1,16 @@
+{% extends 'base.html' %}
+{% block content %}
+<a class="back" href="{{ url_for('index') }}">← Terug naar planning</a>
+<section class="auth card">
+  <div class="eyebrow">Feedback</div>
+  <h1>Wat kan beter?</h1>
+  <p>Werkt iets niet, is iets onduidelijk, of heb je een idee? Laat het weten. De beheerder leest het en ziet ook van wie het komt.</p>
+  <form method="post">
+    <input type="hidden" name="csrf" value="{{ csrf }}">
+    <label>Jouw bericht
+      <textarea name="message" rows="6" maxlength="{{ max_len }}" required placeholder="Bijvoorbeeld: ik zou graag ook dinsdag willen kunnen kiezen.">{{ message }}</textarea>
+    </label>
+    <button class="primary full">Versturen</button>
+  </form>
+</section>
+{% endblock %}

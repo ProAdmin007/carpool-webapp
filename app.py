@@ -100,6 +100,13 @@ def init_db():
           shown_at TEXT,
           PRIMARY KEY (user_id, ride_date)
         );
+        CREATE TABLE IF NOT EXISTS feedback (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+          created_at TEXT NOT NULL,
+          message TEXT NOT NULL,
+          done INTEGER NOT NULL DEFAULT 0
+        );
         CREATE TABLE IF NOT EXISTS settings (
           key TEXT PRIMARY KEY,
           value TEXT NOT NULL
@@ -210,8 +217,12 @@ def shared():
     if 'csrf' not in session:
         session['csrf'] = secrets.token_urlsafe(32)
     insecure = app.config['SESSION_COOKIE_SECURE'] and not request.is_secure
-    return {'csrf': session['csrf'], 'me': g.get('user'), 'weekdays': WEEKDAYS, 'https_needed': insecure,
-            'csp_nonce': g.get('csp_nonce', '')}
+    user = g.get('user')
+    open_feedback = 0
+    if user and user['is_admin']:
+        open_feedback = db().execute('SELECT COUNT(*) FROM feedback WHERE done=0').fetchone()[0]
+    return {'csrf': session['csrf'], 'me': user, 'weekdays': WEEKDAYS, 'https_needed': insecure,
+            'csp_nonce': g.get('csp_nonce', ''), 'open_feedback': open_feedback}
 
 
 @app.after_request
@@ -673,6 +684,11 @@ def settings():
                     flash(f'Account voor {name} gemaakt. Deel de inloggegevens persoonlijk.', 'success')
                 except sqlite3.IntegrityError:
                     flash('Deze naam bestaat al.', 'error')
+        elif action in ('feedback_done', 'feedback_open'):
+            db().execute('UPDATE feedback SET done=? WHERE id=?',
+                         (int(action == 'feedback_done'), request.form.get('feedback_id', '')))
+            db().commit()
+            return redirect(url_for('settings') + '#feedback')
         elif action == 'reset_password':
             user = db().execute('SELECT name FROM users WHERE id=?',
                                 (request.form.get('user_id', ''),)).fetchone()
@@ -685,8 +701,12 @@ def settings():
                 db().commit()
                 flash(f'Tijdelijk wachtwoord voor {user["name"]} ingesteld.', 'success')
         return redirect(url_for('settings'))
+    feedback = db().execute(
+        'SELECT f.*, u.name FROM feedback f LEFT JOIN users u ON u.id=f.user_id '
+        'ORDER BY f.done, f.id DESC LIMIT 50').fetchall()
     return render_template('settings.html', active=enabled_days(), users=all_users(),
-                           count_from=count_from(), today=date.today())
+                           count_from=count_from(), today=date.today(), feedback=feedback,
+                           fmt_dt=lambda v: datetime.fromisoformat(v).strftime('%d-%m-%Y %H:%M'))
 
 
 # --- Agenda-abonnement (iCalendar) -----------------------------------------------
@@ -794,6 +814,34 @@ def calendar_page():
                            google_url='https://calendar.google.com/calendar/r?cid=' + quote(https_url, safe=''),
                            outlook_url='https://outlook.live.com/calendar/0/addfromweb?name=Carpool&url='
                                        + quote(https_url, safe=''))
+
+
+FEEDBACK_MAX_LEN = 2000
+FEEDBACK_PER_DAY = 10
+
+
+@app.route('/feedback', methods=['GET', 'POST'])
+@login_required
+def feedback():
+    if request.method == 'POST':
+        message = request.form.get('message', '').strip()
+        since = (datetime.now() - timedelta(days=1)).isoformat(timespec='seconds')
+        recent = db().execute('SELECT COUNT(*) FROM feedback WHERE user_id=? AND created_at>?',
+                              (g.user['id'], since)).fetchone()[0]
+        if len(message) < 3:
+            flash('Schrijf even wat je kwijt wilt.', 'error')
+        elif len(message) > FEEDBACK_MAX_LEN:
+            flash(f'Je bericht is te lang (maximaal {FEEDBACK_MAX_LEN} tekens).', 'error')
+        elif recent >= FEEDBACK_PER_DAY:
+            flash('Je hebt vandaag al veel feedback gestuurd. Probeer het morgen nog eens.', 'error')
+        else:
+            db().execute('INSERT INTO feedback(user_id, created_at, message) VALUES (?,?,?)',
+                         (g.user['id'], datetime.now().isoformat(timespec='seconds'), message))
+            db().commit()
+            flash('Bedankt voor je feedback! De beheerder krijgt hem te zien.', 'success')
+            return redirect(url_for('index'))
+        return render_template('feedback.html', message=message, max_len=FEEDBACK_MAX_LEN)
+    return render_template('feedback.html', message='', max_len=FEEDBACK_MAX_LEN)
 
 
 @app.route('/password', methods=['GET', 'POST'])

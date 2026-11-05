@@ -169,6 +169,10 @@ Onderaan de planning staat **Ritten in je eigen agenda**. Daar vindt iedereen ee
 - In de agenda staan de dagen waarop je gaat, als hele-dag-afspraak die je niet als bezet toont. Ritten tot 8 weken vooruit en 60 dagen terug.
 - Wie de link heeft, kan je ritten zien. Lekt hij uit, klik dan op **Nieuwe link maken**. De oude link werkt dan direct niet meer.
 
+## Feedback
+
+Iedereen kan via **💬 Feedback** een bericht sturen. Op de planning staat dat onderaan als kaart, op andere pagina's als link onderaan. De beheerder ziet de berichten onder **Instellingen → Feedback**, met een rode teller in het menu zolang er openstaande berichten zijn, en zet ze daar op **Afgehandeld**. Je kunt maximaal 10 berichten per dag sturen, van hooguit 2000 tekens.
+
 ## Oude agenda importeren
 
 `python importeer_agenda.py agenda.ics --admin Anna` zet ritten uit een .ics-agenda in de app. Ritten van vóór vandaag worden afgeronde ritten, met chauffeur en meerijders. Ritten vanaf vandaag worden alleen aanwezigheid; wie er rijdt, rekent de app zelf uit. Namen die nog niet bestaan krijgen een account met een tijdelijk wachtwoord. Je kunt het script veilig opnieuw draaien.
