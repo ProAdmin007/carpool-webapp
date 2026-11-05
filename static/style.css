@@ -124,3 +124,20 @@ textarea{width:100%;border:1px solid var(--border);border-radius:10px;padding:12
 
 /* iPhone: velden met tekst kleiner dan 16px laten Safari inzoomen (en de pagina blijft dan te breed) */
 @media(max-width:700px){input:not([type=checkbox]):not([type=radio]),select,textarea{font-size:16px}}
+
+/* Auditlog */
+.audit-link{display:inline-block;margin:4px 0 6px}
+.audit-filter{display:grid;grid-template-columns:1fr 1fr auto;gap:12px;align-items:end;margin:18px 0 14px;padding:16px 20px}
+.audit-filter select{width:100%;border:1px solid var(--border);border-radius:10px;padding:11px;font:inherit;background:var(--surface);color:var(--text)}
+.audit-list{padding:8px 20px}
+.audit-row{border-top:1px solid var(--border);padding:11px 0}
+.audit-row:first-child{border-top:0}
+.audit-top{display:flex;justify-content:space-between;align-items:center;gap:10px}
+.audit-when{font-size:12px;color:var(--text-3);font-variant-numeric:tabular-nums}
+.audit-cat{background:var(--neutral);color:var(--text-2)}
+.audit-warn .audit-cat{background:var(--error);color:var(--error-text)}
+.audit-what{margin-top:3px;font-size:14px}
+.audit-detail{font-size:13px;color:var(--text-2);margin-top:2px;overflow-wrap:anywhere}
+.audit-meta{font-size:11.5px;color:var(--text-3);margin-top:3px}
+.audit-more{margin:10px 0 8px}
+@media(max-width:700px){.audit-filter{grid-template-columns:1fr 1fr}.audit-filter button{grid-column:1/-1}}

@@ -12,7 +12,8 @@ from functools import wraps
 from pathlib import Path
 from urllib.parse import quote
 
-from flask import Flask, abort, flash, g, redirect, render_template, request, send_from_directory, session, url_for
+from flask import (Flask, abort, flash, g, has_request_context, redirect, render_template, request,
+                   send_from_directory, session, url_for)
 from flask.sessions import SecureCookieSessionInterface
 from werkzeug.security import check_password_hash, generate_password_hash
 
@@ -107,6 +108,17 @@ def init_db():
           message TEXT NOT NULL,
           done INTEGER NOT NULL DEFAULT 0
         );
+        CREATE TABLE IF NOT EXISTS audit_log (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          at TEXT NOT NULL,
+          user_id INTEGER,
+          actor TEXT NOT NULL DEFAULT '',
+          action TEXT NOT NULL,
+          detail TEXT NOT NULL DEFAULT '',
+          ip TEXT NOT NULL DEFAULT '',
+          device TEXT NOT NULL DEFAULT ''
+        );
+        CREATE INDEX IF NOT EXISTS audit_log_at ON audit_log(at);
         CREATE TABLE IF NOT EXISTS settings (
           key TEXT PRIMARY KEY,
           value TEXT NOT NULL
@@ -392,6 +404,60 @@ def find_user(name):
     return db().execute('SELECT * FROM users WHERE name=? COLLATE NOCASE', (clean_name(name),)).fetchone()
 
 
+# --- Auditlog ---------------------------------------------------------------------
+AUDIT_KEEP_DAYS = 365
+AUDIT_ACTIONS = {   # actie: (categorie, omschrijving)
+    'login': ('Inloggen', 'Ingelogd'),
+    'login_failed': ('Inloggen', 'Inloggen mislukt'),
+    'login_blocked': ('Inloggen', 'Geblokkeerd na te veel pogingen'),
+    'logout': ('Inloggen', 'Uitgelogd'),
+    'setup': ('Account', 'Beheerder aangemaakt'),
+    'password_change': ('Account', 'Eigen wachtwoord gewijzigd'),
+    'calendar_renew': ('Account', 'Nieuwe agendalink gemaakt'),
+    'server_reset': ('Account', 'Wachtwoord gereset via de server'),
+    'attendance': ('Aanwezigheid', 'Aanwezigheid doorgegeven'),
+    'ride_confirm': ('Ritten', 'Rit afgerond'),
+    'ride_undo': ('Ritten', 'Rit ongedaan gemaakt'),
+    'no_ride': ('Ritten', 'Niet gereden'),
+    'settings_days': ('Instellingen', 'Carpooldagen gewijzigd'),
+    'settings_count_from': ('Instellingen', 'Startdatum telling gewijzigd'),
+    'user_add': ('Instellingen', 'Collega toegevoegd'),
+    'password_reset': ('Instellingen', 'Wachtwoord van collega gereset'),
+    'feedback_sent': ('Feedback', 'Feedback verstuurd'),
+    'feedback_done': ('Feedback', 'Feedback afgehandeld'),
+    'feedback_open': ('Feedback', 'Feedback heropend'),
+}
+AUDIT_CATEGORIES = sorted({c for c, _ in AUDIT_ACTIONS.values()})
+
+
+def client_device():
+    ua = request.headers.get('User-Agent', '').lower()
+    for key, label in (('iphone', 'iPhone'), ('ipad', 'iPad'), ('android', 'Android'), ('windows', 'Windows'),
+                       ('mac os', 'Mac'), ('cros', 'Chromebook'), ('linux', 'Linux')):
+        if key in ua:
+            return label
+    return 'onbekend'
+
+
+def audit(action, detail='', user=None):
+    """Leg een actie vast in het auditlog (en ruim regels ouder dan een jaar op)."""
+    if user is None and has_request_context():
+        user = g.get('user')
+    if has_request_context():
+        # Achter Cloudflare staat het echte IP-adres in CF-Connecting-IP; anders het adres van de verbinding.
+        ip = request.headers.get('CF-Connecting-IP') or request.remote_addr or ''
+        device = client_device()
+    else:
+        ip, device = '', 'server'
+    now = datetime.now()
+    db().execute('INSERT INTO audit_log(at,user_id,actor,action,detail,ip,device) VALUES (?,?,?,?,?,?,?)',
+                 (now.isoformat(timespec='seconds'), user['id'] if user else None, user['name'] if user else '',
+                  action, detail[:500], ip[:64], device))
+    db().execute('DELETE FROM audit_log WHERE at<?',
+                 ((now - timedelta(days=AUDIT_KEEP_DAYS)).isoformat(timespec='seconds'),))
+    db().commit()
+
+
 ERRORS = {400: 'Dat ging niet goed', 403: 'Dit mag je niet doen', 404: 'Pagina niet gevonden',
           413: 'Dat formulier was te groot', 500: 'Er ging iets mis'}
 
@@ -428,6 +494,7 @@ def setup():
             db().execute('INSERT INTO users(name, password_hash, is_admin) VALUES (?, ?, 1)',
                          (name, generate_password_hash(pw)))
             db().commit()
+            audit('setup', name, user=find_user(name))
             flash('Beheerder aangemaakt. Log nu in.', 'success')
             return redirect(url_for('login'))
     return render_template('setup.html')
@@ -444,6 +511,7 @@ def login():
         name = clean_name(request.form.get('name', ''))
         ip = request.remote_addr or '?'
         if login_blocked(name, ip):
+            audit('login_blocked', f'Naam: "{name[:60]}"')
             flash('Te veel mislukte pogingen. Wacht een kwartier en probeer het dan opnieuw.', 'error')
             return render_template('login.html'), 429
         user = find_user(name)  # hoofdletters en spaties maken niet uit
@@ -451,14 +519,18 @@ def login():
         if user and ok:
             clear_fails(name)
             start_session(user)
+            audit('login', user=user)
             return redirect(url_for('index'))
         register_fail(name, ip)
+        audit('login_failed', f'Naam: "{name[:60]}"' + ('' if user else ' (bestaat niet)'))
         flash('Naam of wachtwoord klopt niet.', 'error')
     return render_template('login.html')
 
 
 @app.post('/logout')
 def logout():
+    if g.user:
+        audit('logout')
     session.clear()
     return redirect(url_for('login'))
 
@@ -566,6 +638,7 @@ def set_attendance(ride_date):
                  'ON CONFLICT(user_id,ride_date) DO UPDATE SET going=excluded.going',
                  (g.user['id'], ride_date, int(going)))
     db().commit()
+    audit('attendance', f"{fmt(d)}: {'gaat' if going == '1' else 'gaat niet'}")
     flash('Je aanwezigheid is bijgewerkt.', 'success')
     return back_to(ride_date)
 
@@ -610,6 +683,9 @@ def confirm(ride_date):
                      'ON CONFLICT(user_id,ride_date) DO UPDATE SET going=excluded.going',
                      (uid, ride_date, int(uid == driver or uid in passengers)))
     db().commit()
+    names = {u['id']: u['name'] for u in all_users()}
+    audit('ride_confirm', f"{fmt(d)}: {names[driver]} reed, mee: "
+                          + (', '.join(names[p] for p in sorted(passengers)) or 'niemand'))
     flash('Rit opgeslagen! De planning voor de volgende dagen is bijgewerkt.', 'success')
     return back_to(ride_date)
 
@@ -625,6 +701,7 @@ def no_ride(ride_date):
         db().execute('INSERT INTO attendance(user_id,ride_date,going) VALUES (?,?,0) '
                      'ON CONFLICT(user_id,ride_date) DO UPDATE SET going=0', (u['id'], ride_date))
     db().commit()
+    audit('no_ride', fmt(d))
     flash(f'Opgeslagen: op {fmt(d).lower()} is niet gereden.', 'success')
     return back_to(ride_date)
 
@@ -632,11 +709,14 @@ def no_ride(ride_date):
 @app.post('/undo/<ride_date>')
 @login_required
 def undo(ride_date):
-    parse_day(ride_date)
+    d = parse_day(ride_date)
+    old = db().execute('SELECT u.name FROM rides r LEFT JOIN users u ON u.id=r.driver_id WHERE r.ride_date=?',
+                       (ride_date,)).fetchone()
     db().execute('DELETE FROM ride_passengers WHERE ride_date=?', (ride_date,))
     removed = db().execute('DELETE FROM rides WHERE ride_date=?', (ride_date,)).rowcount
     db().commit()
     if removed:
+        audit('ride_undo', f"{fmt(d)} (chauffeur was {old['name'] if old and old['name'] else '?'})")
         flash('De rit is ongedaan gemaakt. Je kunt hem opnieuw invullen.', 'success')
     else:
         flash('Deze rit was al ongedaan gemaakt.', 'error')
@@ -656,6 +736,7 @@ def settings():
                 db().execute("UPDATE settings SET value=? WHERE key='weekdays'",
                              (','.join(sorted(set(chosen))),))
                 db().commit()
+                audit('settings_days', ', '.join(WEEKDAYS[int(i)] for i in sorted(set(chosen))))
                 flash('Carpooldagen aangepast.', 'success')
         elif action == 'count_from':
             raw = request.form.get('count_from', '').strip()
@@ -668,6 +749,7 @@ def settings():
             db().execute("INSERT INTO settings(key,value) VALUES ('count_from',?) "
                          "ON CONFLICT(key) DO UPDATE SET value=excluded.value", (raw,))
             db().commit()
+            audit('settings_count_from', fmt(date.fromisoformat(raw)) if raw else 'leeg: alle ritten tellen mee')
             flash('Startdatum voor de telling opgeslagen.' if raw else 'Alle ritten tellen weer mee.', 'success')
         elif action == 'add_user':
             name = clean_name(request.form.get('name', ''))
@@ -681,13 +763,16 @@ def settings():
                     db().execute('INSERT INTO users(name,password_hash,must_change_password) VALUES (?,?,1)',
                                  (name, generate_password_hash(pw)))
                     db().commit()
+                    audit('user_add', name)
                     flash(f'Account voor {name} gemaakt. Deel de inloggegevens persoonlijk.', 'success')
                 except sqlite3.IntegrityError:
                     flash('Deze naam bestaat al.', 'error')
         elif action in ('feedback_done', 'feedback_open'):
-            db().execute('UPDATE feedback SET done=? WHERE id=?',
-                         (int(action == 'feedback_done'), request.form.get('feedback_id', '')))
+            changed = db().execute('UPDATE feedback SET done=? WHERE id=?',
+                                   (int(action == 'feedback_done'), request.form.get('feedback_id', ''))).rowcount
             db().commit()
+            if changed:
+                audit(action, f"bericht #{request.form.get('feedback_id', '')}")
             return redirect(url_for('settings') + '#feedback')
         elif action == 'reset_password':
             user = db().execute('SELECT name FROM users WHERE id=?',
@@ -699,6 +784,7 @@ def settings():
                 db().execute('UPDATE users SET password_hash=?, must_change_password=1 WHERE id=?',
                              (generate_password_hash(pw), request.form['user_id']))
                 db().commit()
+                audit('password_reset', user['name'])
                 flash(f'Tijdelijk wachtwoord voor {user["name"]} ingesteld.', 'success')
         return redirect(url_for('settings'))
     feedback = db().execute(
@@ -806,6 +892,7 @@ def calendar_page():
     renew = request.method == 'POST' and request.form.get('action') == 'renew'
     token = calendar_token(g.user, renew=renew)
     if renew:
+        audit('calendar_renew')
         flash('Nieuwe agendalink gemaakt. De oude link werkt niet meer.', 'success')
         return redirect(url_for('calendar_page'))
     https_url = url_for('calendar_ics', token=token, _external=True)
@@ -838,10 +925,42 @@ def feedback():
             db().execute('INSERT INTO feedback(user_id, created_at, message) VALUES (?,?,?)',
                          (g.user['id'], datetime.now().isoformat(timespec='seconds'), message))
             db().commit()
+            audit('feedback_sent', message[:80] + ('…' if len(message) > 80 else ''))
             flash('Bedankt voor je feedback! De beheerder krijgt hem te zien.', 'success')
             return redirect(url_for('index'))
         return render_template('feedback.html', message=message, max_len=FEEDBACK_MAX_LEN)
     return render_template('feedback.html', message='', max_len=FEEDBACK_MAX_LEN)
+
+
+AUDIT_PAGE_SIZE = 100
+
+
+@app.route('/audit')
+@admin_required
+def audit_page():
+    where, args = [], []
+    who = request.args.get('wie', '')
+    cat = request.args.get('soort', '')
+    if who == 'anoniem':
+        where.append('user_id IS NULL')
+    elif who.isdigit():
+        where.append('user_id=?'); args.append(int(who))
+    if cat in AUDIT_CATEGORIES:
+        acts = [a for a, (c, _) in AUDIT_ACTIONS.items() if c == cat]
+        where.append('action IN (%s)' % ','.join('?' * len(acts))); args += acts
+    before = request.args.get('voor', '')
+    if before.isdigit():
+        where.append('id<?'); args.append(int(before))
+    # Alleen vaste stukjes SQL; alle gebruikersinvoer gaat via ?-parameters.
+    sql = 'SELECT * FROM audit_log' + (' WHERE ' + ' AND '.join(where) if where else '')  # nosec B608
+    rows = db().execute(sql + ' ORDER BY id DESC LIMIT ?', args + [AUDIT_PAGE_SIZE + 1]).fetchall()
+    more = len(rows) > AUDIT_PAGE_SIZE
+    rows = rows[:AUDIT_PAGE_SIZE]
+    return render_template('audit.html', rows=rows, more=more, who=who, cat=cat, users=all_users(),
+                           categories=AUDIT_CATEGORIES, actions=AUDIT_ACTIONS, keep_days=AUDIT_KEEP_DAYS,
+                           fmt_dt=lambda v: datetime.fromisoformat(v).strftime('%d-%m-%Y %H:%M'),
+                           next_url=url_for('audit_page', wie=who or None, soort=cat or None,
+                                            voor=rows[-1]['id']) if more else None)
 
 
 @app.route('/password', methods=['GET', 'POST'])
@@ -860,6 +979,7 @@ def change_password():
             db().commit()
             # Andere apparaten worden uitgelogd; dit apparaat blijft ingelogd.
             start_session(db().execute('SELECT * FROM users WHERE id=?', (g.user['id'],)).fetchone())
+            audit('password_change')
             flash('Wachtwoord gewijzigd.', 'success')
             return redirect(url_for('index'))
     return render_template('password.html')

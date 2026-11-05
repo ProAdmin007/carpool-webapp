@@ -173,6 +173,19 @@ Onderaan de planning staat **Ritten in je eigen agenda**. Daar vindt iedereen ee
 
 Iedereen kan via **💬 Feedback** een bericht sturen. Op de planning staat dat onderaan als kaart, op andere pagina's als link onderaan. De beheerder ziet de berichten onder **Instellingen → Feedback**, met een rode teller in het menu zolang er openstaande berichten zijn, en zet ze daar op **Afgehandeld**. Je kunt maximaal 10 berichten per dag sturen, van hooguit 2000 tekens.
 
+## Auditlog
+
+De beheerder vindt onder **Instellingen → 📋 Auditlog bekijken** wie wat heeft gedaan en wanneer. Je kunt filteren op persoon (of "Niet ingelogd") en op soort.
+
+- **Inloggen:** ingelogd, mislukte pogingen (met de naam die werd geprobeerd), blokkades en uitloggen.
+- **Ritten:** rit afgerond (wie reed, wie reed mee), ongedaan gemaakt, niet gereden.
+- **Aanwezigheid:** Ja/Nee per dag.
+- **Instellingen:** carpooldagen, startdatum van de telling, collega toegevoegd, wachtwoord van een collega gereset.
+- **Account:** eigen wachtwoord gewijzigd, nieuwe agendalink, wachtwoord gereset via `reset_wachtwoord.py`.
+- **Feedback:** verstuurd, afgehandeld of heropend.
+
+Per regel worden het IP-adres en het soort apparaat (iPhone, Android, Windows, …) bewaard. Achter Cloudflare komt het IP-adres uit de header `CF-Connecting-IP`. Zie het als een aanwijzing, niet als bewijs. Wachtwoorden worden nooit gelogd. Regels ouder dan 365 dagen worden automatisch verwijderd.
+
 ## Oude agenda importeren
 
 `python importeer_agenda.py agenda.ics --admin Anna` zet ritten uit een .ics-agenda in de app. Ritten van vóór vandaag worden afgeronde ritten, met chauffeur en meerijders. Ritten vanaf vandaag worden alleen aanwezigheid; wie er rijdt, rekent de app zelf uit. Namen die nog niet bestaan krijgen een account met een tijdelijk wachtwoord. Je kunt het script veilig opnieuw draaien.

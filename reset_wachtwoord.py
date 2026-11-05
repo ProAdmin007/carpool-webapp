@@ -30,6 +30,7 @@ def main():
         carpool.db().execute('UPDATE users SET password_hash=?, must_change_password=1 WHERE id=?',
                              (generate_password_hash(password), user['id']))
         carpool.db().commit()
+        carpool.audit('server_reset', user['name'])
         print(f'Nieuw tijdelijk wachtwoord voor {user["name"]}: {password}')
         print('Bij de volgende login wordt gevraagd een eigen wachtwoord te kiezen.')
         return 0

@@ -1,0 +1,41 @@
+{% extends 'base.html' %}
+{% block content %}
+<a class="back" href="{{ url_for('settings') }}">← Terug naar instellingen</a>
+<h1>Auditlog</h1>
+<p class="lead">Wie heeft wat gedaan, en wanneer. Regels ouder dan {{ keep_days }} dagen worden automatisch verwijderd.</p>
+
+<form class="card audit-filter" method="get">
+  <label>Wie
+    <select name="wie">
+      <option value="">Iedereen</option>
+      {% for u in users %}<option value="{{ u.id }}" {% if who == u.id|string %}selected{% endif %}>{{ u.name }}</option>{% endfor %}
+      <option value="anoniem" {% if who == 'anoniem' %}selected{% endif %}>Niet ingelogd</option>
+    </select>
+  </label>
+  <label>Soort
+    <select name="soort">
+      <option value="">Alles</option>
+      {% for c in categories %}<option value="{{ c }}" {% if cat == c %}selected{% endif %}>{{ c }}</option>{% endfor %}
+    </select>
+  </label>
+  <button class="primary">Filteren</button>
+</form>
+
+<section class="card audit-list">
+  {% for r in rows %}
+  {% set info = actions.get(r.action, ('Overig', r.action)) %}
+  <article class="audit-row {% if r.action in ('login_failed', 'login_blocked') %}audit-warn{% endif %}">
+    <div class="audit-top">
+      <span class="audit-when">{{ fmt_dt(r.at) }}</span>
+      <span class="pill audit-cat">{{ info[0] }}</span>
+    </div>
+    <div class="audit-what"><strong>{{ r.actor or 'Niet ingelogd' }}</strong> · {{ info[1] }}</div>
+    {% if r.detail %}<div class="audit-detail">{{ r.detail }}</div>{% endif %}
+    <div class="audit-meta">{{ r.device }}{% if r.ip %} · {{ r.ip }}{% endif %}</div>
+  </article>
+  {% else %}
+  <p class="muted">Nog niets vastgelegd{% if who or cat %} voor dit filter{% endif %}.</p>
+  {% endfor %}
+  {% if next_url %}<a class="secondary full btn-link audit-more" href="{{ next_url }}">Oudere regels</a>{% endif %}
+</section>
+{% endblock %}
