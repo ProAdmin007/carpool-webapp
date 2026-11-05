@@ -93,8 +93,16 @@ table.scoreboard{border-collapse:collapse;font-size:13px}
 .cal-arrow{margin-left:auto;font-size:24px;color:var(--text-3)}
 .cal-card{margin-top:16px}
 .cal-card label{margin-top:14px}
-.cal-buttons{display:grid;gap:10px;margin-bottom:10px}
+.cal-buttons{display:grid;grid-template-columns:minmax(0,1fr);gap:10px;margin-bottom:10px}
 .cal-buttons .secondary,.cal-card button.secondary{display:block;text-align:center;padding:12px 15px;font-size:14px;color:var(--text)}
 .cal-card button.secondary{margin-top:10px;width:100%}
 .cal-list{padding-left:18px;color:var(--text-2);line-height:1.5}
 #cal-url{font-size:12px}
+.google-help summary{list-style:none;cursor:pointer}
+.google-help summary::-webkit-details-marker{display:none}
+.google-help[open] summary{border-color:var(--accent);color:var(--accent-text)}
+.google-steps{border:1px solid var(--border);border-radius:12px;padding:12px 14px;margin-top:8px;font-size:14px}
+.google-steps p{color:var(--text)}
+.google-steps ol{padding-left:20px;margin:6px 0 0;color:var(--text-2);line-height:1.5}
+.google-steps li{margin-bottom:8px}
+.google-open{margin:8px 0 4px;white-space:normal}

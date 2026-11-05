@@ -31,6 +31,8 @@ def test_agendapagina_en_link():
     url = feed_url(c)
     assert url.startswith('http://localhost/agenda/') and url.endswith('.ics')
     assert 'webcal://localhost/agenda/' in page and 'calendar.google.com' in page
+    assert 'cid=http%3A%2F%2Flocalhost%2Fagenda%2F' in page, 'Google krijgt de https/http-link, geen webcal'
+    assert 'Via URL' in page
     assert feed_url(c) == url, 'link blijft hetzelfde'
 
 

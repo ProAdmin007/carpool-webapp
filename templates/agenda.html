@@ -8,7 +8,19 @@
   <h2>Toevoegen</h2>
   <div class="cal-buttons">
     <a class="primary full btn-link" href="{{ webcal_url }}">📅 iPhone / Mac / Outlook-app</a>
-    <a class="secondary full btn-link" href="{{ google_url }}" target="_blank" rel="noopener">Google Agenda</a>
+    <details class="google-help">
+      <summary class="secondary full btn-link">Google Agenda</summary>
+      <div class="google-steps">
+        <p><strong>Let op:</strong> de Google Agenda-<em>app</em> op je telefoon kan geen agenda toevoegen via een link. Dat moet één keer op een computer. Daarna staat hij vanzelf ook op je telefoon.</p>
+        <ol>
+          <li>Kopieer hieronder je agendalink, of mail hem naar jezelf.</li>
+          <li>Ga op een computer naar <strong>calendar.google.com</strong>. Of klik op deze knop als je nu al op een computer zit:
+            <a class="secondary full btn-link google-open" href="{{ google_url }}" target="_blank" rel="noopener">Openen in Google Agenda (computer)</a></li>
+          <li>Kies links bij <strong>Andere agenda's</strong> het <strong>+</strong> en dan <strong>Via URL</strong>. Plak de link en klik op <strong>Agenda toevoegen</strong>.</li>
+          <li>Zie je hem niet op je telefoon? Open in de app <strong>Instellingen</strong>, tik op <strong>Carpool</strong> en zet <strong>Synchroniseren</strong> aan.</li>
+        </ol>
+      </div>
+    </details>
     <a class="secondary full btn-link" href="{{ outlook_url }}" target="_blank" rel="noopener">Outlook.com / Office 365</a>
   </div>
   <p class="muted minor">Werkt een knop niet? Kopieer dan de link hieronder en kies in je agenda "Agenda toevoegen via URL" of "Abonneren".</p>

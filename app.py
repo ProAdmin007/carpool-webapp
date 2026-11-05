@@ -791,7 +791,7 @@ def calendar_page():
     https_url = url_for('calendar_ics', token=token, _external=True)
     webcal_url = 'webcal://' + https_url.split('://', 1)[1]
     return render_template('agenda.html', https_url=https_url, webcal_url=webcal_url,
-                           google_url='https://calendar.google.com/calendar/r?cid=' + quote(webcal_url, safe=''),
+                           google_url='https://calendar.google.com/calendar/r?cid=' + quote(https_url, safe=''),
                            outlook_url='https://outlook.live.com/calendar/0/addfromweb?name=Carpool&url='
                                        + quote(https_url, safe=''))
 
