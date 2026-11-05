@@ -8,6 +8,7 @@ import threading
 import time
 from collections import defaultdict
 from datetime import date, datetime, timedelta, timezone
+from fractions import Fraction
 from functools import wraps
 from pathlib import Path
 from urllib.parse import quote
@@ -237,6 +238,25 @@ def shared():
             'csp_nonce': g.get('csp_nonce', ''), 'open_feedback': open_feedback}
 
 
+FRACTION_GLYPHS = {Fraction(1, 2): '½', Fraction(1, 3): '⅓', Fraction(2, 3): '⅔', Fraction(1, 4): '¼',
+                   Fraction(3, 4): '¾', Fraction(1, 5): '⅕', Fraction(2, 5): '⅖', Fraction(3, 5): '⅗',
+                   Fraction(4, 5): '⅘', Fraction(1, 6): '⅙', Fraction(5, 6): '⅚'}
+
+
+@app.template_filter('rides')
+def format_rides(value, sign=False):
+    """1⅔, ½, 0 of 2,4: ritten leesbaar tonen; met sign=True ook + of −."""
+    value = Fraction(value)
+    prefix = ('+' if value > 0 else '−' if value < 0 else '') if sign else ('−' if value < 0 else '')
+    value = abs(value)
+    whole, rest = divmod(value, 1)
+    if not rest:
+        return f'{prefix}{whole}'
+    if rest in FRACTION_GLYPHS:
+        return f"{prefix}{whole or ''}{FRACTION_GLYPHS[rest]}"
+    return prefix + f'{float(value):.1f}'.replace('.', ',')
+
+
 @app.after_request
 def security_headers(resp):
     nonce = g.get('csp_nonce', '')
@@ -279,7 +299,7 @@ def all_users():
 
 
 def count_from():
-    """Ritten vóór deze datum tellen niet mee in het saldo (leeg = alles telt)."""
+    """Ritten vóór deze datum tellen niet mee in de stand (leeg = alles telt)."""
     row = db().execute("SELECT value FROM settings WHERE key='count_from'").fetchone()
     return row['value'] if row else ''
 
@@ -312,49 +332,47 @@ def ride_history():
 
 
 class Ledger:
-    """Houdt per persoon een saldo bij: rijden levert +1 per meerijder op, meerijden kost 1.
+    """Eerlijk aandeel: elke rit wordt gedeeld door iedereen die meegaat.
 
-    Er wordt ook per tweetal bijgehouden wie wie heeft gereden (`owed`). Bij het kiezen tellen
-    alleen de verhoudingen met de collega's die die dag gaan: zo betaalt niemand de schuld van
-    een afwezige collega af. Als iedereen er is, komt dit precies overeen met het totale saldo.
+    Gaan er drie mensen, dan is ieders aandeel ⅓ rit; met z'n tweeën ½ rit. De chauffeur
+    rijdt 1 rit. `balance` = gereden min aandeel: negatief betekent dat iemand achterloopt.
+    Van wie er die dag gaat, rijdt degene die het verst achterloopt. Rijden kost evenveel
+    moeite met één of twee meerijders, dus een volle auto telt niet zwaarder.
+    Simulatie (2000 dagen, wisselende aanwezigheid): iedereen blijft binnen 1 rit van zijn
+    eerlijke aandeel.
     """
 
     def __init__(self, users):
-        self.balance = {u['id']: 0 for u in users}
         self.drives = {u['id']: 0 for u in users}
         self.rides_along = {u['id']: 0 for u in users}
+        self.share = {u['id']: Fraction(0) for u in users}
         self.last = {u['id']: '0000-00-00' for u in users}
-        self.owed = defaultdict(int)   # (a, b): keer dat a b reed, min keer dat b a reed
+
+    @property
+    def balance(self):
+        return {u: self.drives[u] - self.share[u] for u in self.drives}
 
     def add(self, iso, driver, passengers):
-        passengers = [p for p in passengers if p != driver and p in self.balance]
-        if driver in self.balance:
-            self.balance[driver] += len(passengers)
+        passengers = [p for p in passengers if p != driver and p in self.drives]
+        group = passengers + ([driver] if driver in self.drives else [])
+        for u in group:
+            self.share[u] += Fraction(1, len(group))
+        if driver in self.drives:
             self.drives[driver] += 1
             self.last[driver] = iso
         for p in passengers:
-            self.balance[p] -= 1
             self.rides_along[p] += 1
-            if driver in self.balance:
-                self.owed[(driver, p)] += 1
-                self.owed[(p, driver)] -= 1
-
-    def score(self, uid, present_ids):
-        """Saldo van `uid` alleen ten opzichte van de collega's die er die dag zijn."""
-        return sum(self.owed[(uid, v)] for v in present_ids if v != uid)
 
     def pick(self, present):
-        # Laagste saldo t.o.v. de aanwezigen eerst; bij gelijkstand wie het langst niet reed,
-        # daarna minst gereden.
-        ids = [u['id'] for u in present]
-        return min(present, key=lambda u: (self.score(u['id'], ids), self.last[u['id']],
+        # Wie het verst achterloopt eerst; bij gelijkstand wie het langst niet reed, daarna minst gereden.
+        return min(present, key=lambda u: (self.drives[u['id']] - self.share[u['id']], self.last[u['id']],
                                            self.drives[u['id']], u['id']))['id']
 
 
 def plan_for(end):
     """Plan alle carpooldagen t/m `end`.
 
-    Bevestigde ritten zijn definitief en tellen mee in het saldo. Vandaag en toekomstige
+    Bevestigde ritten zijn definitief en tellen mee in de stand. Vandaag en toekomstige
     dagen worden virtueel ingepland (met alle aanwezigen als meerijders), zodat niet
     telkens dezelfde persoon wordt gekozen. Verleden dagen zonder bevestiging tellen niet mee.
     """
@@ -386,7 +404,7 @@ def plan_for(end):
                 if iso >= since:
                     ledger.add(iso, ride['driver'], ride['passengers'])
                 elif ride['driver'] in ledger.last:
-                    # Telt niet mee voor het saldo, maar wel voor 'wie reed het langst geleden'.
+                    # Telt niet mee voor de stand, maar wel voor 'wie reed het langst geleden'.
                     ledger.last[ride['driver']] = iso
             else:
                 # Gaat er maar één persoon, dan is er geen carpool: geen chauffeur, telt niet mee.

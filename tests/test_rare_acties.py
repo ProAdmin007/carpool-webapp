@@ -240,7 +240,9 @@ def test_chauffeur_ook_als_meerijder_aangevinkt():
     c.post(f'/confirm/{PAST}', data={'csrf': tok(c), 'driver': '2', 'passengers': ['2', '1', '1', '3']})
     with A.app.test_request_context():
         L = A.stats()
-    assert L.balance == {1: -1, 2: 2, 3: -1}
+    from fractions import Fraction
+    assert L.balance == {1: -Fraction(1, 3), 2: Fraction(2, 3), 3: -Fraction(1, 3)}
+    assert L.drives[2] == 1 and L.rides_along == {1: 1, 2: 0, 3: 1}
 
 
 def test_alleen_gereden_telt_niet():
@@ -252,9 +254,9 @@ def test_alleen_gereden_telt_niet():
     assert L.balance == {1: 0, 2: 0, 3: 0} and L.drives[2] == 1
 
 
-def test_niemand_betaalt_schuld_van_afwezige_af():
+def test_niemand_rijdt_twee_keer_voor_een_afwezige():
     """Bas reed Anna en Chris. Daarna gaan alleen Bas en Chris, twee keer:
-    Chris rijdt één keer terug, de tweede keer is Bas weer aan de beurt (Anna's schuld blijft bij Anna)."""
+    Chris rijdt één keer, de tweede keer is Bas weer aan de beurt."""
     users = [{'id': 1}, {'id': 2}, {'id': 3}]
     L = A.Ledger(users)
     L.add('2026-01-01', 2, [1, 3])
@@ -265,6 +267,27 @@ def test_niemand_betaalt_schuld_van_afwezige_af():
     assert L.pick(two) == 2, 'Chris hoeft niet voor Anna bij te rijden'
     L.add('2026-01-08', 2, [3])
     assert L.pick(users) == 1, 'met iedereen erbij is Anna aan de beurt'
+
+
+def test_volle_auto_telt_niet_zwaarder():
+    """De situatie van Laura: Bas reed met z'n drieën, Chris met z'n tweeën (alleen Bas mee),
+    Anna met z'n drieën. Daarna is Bas aan de beurt, niet nog een keer Chris."""
+    users = [{'id': 1}, {'id': 2}, {'id': 3}]
+    L = A.Ledger(users)
+    L.add('2026-01-01', 2, [1, 3])   # Bas
+    L.add('2026-01-05', 3, [2])      # Chris, met z'n tweeën
+    L.add('2026-01-12', 1, [2, 3])   # Anna
+    assert L.pick(users) == 2, 'Bas reed het langst geleden en staat even ver achter als Chris'
+    L.add('2026-01-15', 2, [1, 3])
+    assert L.pick(users) == 3
+
+
+def test_ritten_netjes_weergegeven():
+    from fractions import Fraction as F
+    assert A.format_rides(F(5, 3)) == '1⅔' and A.format_rides(F(1, 2)) == '½'
+    assert A.format_rides(F(0)) == '0' and A.format_rides(F(2)) == '2'
+    assert A.format_rides(F(-1, 3), sign=True) == '−⅓' and A.format_rides(F(1, 6), sign=True) == '+⅙'
+    assert A.format_rides(F(17, 7)) == '2,4'
 
 
 def test_dubbel_afronden_en_dubbelklik():

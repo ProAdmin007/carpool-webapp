@@ -218,15 +218,20 @@
 <details class="card stats-more">
   <summary>Hoe wordt dit bepaald? <span class="muted">Bekijk de stand</span></summary>
   <table class="scoreboard">
-    <thead><tr><th></th><th>Gereden</th><th>Meegereden</th><th>Saldo</th></tr></thead>
+    <thead><tr><th></th><th>Gereden</th><th>Eerlijk aandeel</th><th>Stand</th></tr></thead>
     <tbody>
+    {% set bal = ledger.balance %}
     {% for u in users %}
-      {% set b = ledger.balance[u.id] %}
-      <tr><td>{{ u.name }}</td><td>{{ ledger.drives[u.id] }}</td><td>{{ ledger.rides_along[u.id] }}</td><td class="{{ 'pos' if b > 0 else ('neg' if b < 0 else '') }}">{{ '+' if b > 0 }}{{ b }}</td></tr>
+      {% set b = bal[u.id] %}
+      <tr><td>{{ u.name }}</td><td>{{ ledger.drives[u.id] }}</td><td>{{ ledger.share[u.id]|rides }}</td><td class="{{ 'pos' if b > 0 else ('neg' if b < 0 else '') }}">{{ b|rides(true) }}</td></tr>
     {% endfor %}
     </tbody>
   </table>
-  <p class="muted minor">Voor elke collega die met je meerijdt krijg je er 1 bij. Rijd je zelf mee, dan gaat er 1 af. Van wie er die dag gaat, rijdt degene die bij de anderen van die dag het meest achterstaat. Wie er niet is, telt die dag niet mee, zodat niemand voor een ander hoeft bij te rijden. Zo rijdt iedereen ongeveer even vaak als hij meerijdt.{% if since %} Ritten tellen mee vanaf {{ short(since) }}.{% endif %}</p>
+  <div class="muted minor how">
+    <p><strong>Elke rit wordt eerlijk gedeeld.</strong> Gaan jullie met z'n drieën, dan is jouw aandeel ⅓ rit. Met z'n tweeën is dat ½ rit.</p>
+    <p>Wie het minst gereden heeft ten opzichte van zijn aandeel (de laagste stand), rijdt de volgende keer.</p>
+    <p>Rijd je met één of met twee collega's: het telt als één rit.{% if since %} Ritten tellen mee vanaf {{ short(since) }}.{% endif %}</p>
+  </div>
 </details>
 <a class="card cal-link" href="{{ url_for('calendar_page') }}"><span>📅</span><span><strong>Ritten in je eigen agenda</strong><br><small class="muted">Google, Outlook of iPhone. Synchroniseert vanzelf.</small></span><span class="cal-arrow">›</span></a>
 <a class="card cal-link" href="{{ url_for('feedback') }}"><span>💬</span><span><strong>Feedback of een idee?</strong><br><small class="muted">Laat weten wat beter kan.</small></span><span class="cal-arrow">›</span></a>

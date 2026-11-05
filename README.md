@@ -153,10 +153,10 @@ docker compose cp carpool:/data/backup.sqlite3 ./backup.sqlite3
 1. De beheerder kiest de vaste dagen onder **Instellingen** (standaard maandag en donderdag). Een dag erbij is één vinkje.
 2. Iedereen klikt per dag op **Ja, ik ga** of **Nee**. Je ziet twee weken vooruit, dus je kunt een week van tevoren invullen.
 3. Na de rit klikt iemand op **Rit afronden: wie reed er?**, kiest wie er reed en vinkt aan wie er meereed. Dat mag iemand anders zijn dan de geplande chauffeur.
-4. Iedereen heeft een **saldo**. De chauffeur krijgt +1 per meerijder en iedere meerijder krijgt −1. De app houdt ook per tweetal bij wie wie heeft gereden. Van de mensen die die dag gaan, rijdt degene die **bij de anderen van die dag het meest achterstaat**. Wie er niet is telt die dag niet mee, zodat niemand de schuld van een afwezige collega afbetaalt. Bij gelijkstand rijdt wie het langst niet heeft gereden.
+4. **Eerlijk aandeel:** elke rit wordt gedeeld door iedereen die meegaat. Met z'n drieën is ieders aandeel ⅓ rit, met z'n tweeën ½ rit. De **stand** is *gereden min aandeel*. Van de mensen die die dag gaan, rijdt degene met de **laagste stand**. Bij gelijkstand rijdt wie het langst niet heeft gereden.
 5. De planning voor de komende dagen wordt meteen opnieuw berekend. Een verkeerd ingevulde rit maak je ongedaan met **Klopt niet? Ongedaan maken**.
 
-Voorbeeld: Anna rijdt met Bas en Chris mee. Anna staat dan op +2, Bas en Chris op −1. Daarna rijdt Bas of Chris. Rijdt Anna alleen met Bas, dan krijgt alleen Bas er −1 bij.
+Voorbeeld: Anna rijdt met Bas en Chris. Iedereen krijgt ⅓ aandeel; Anna staat op +⅔, Bas en Chris op −⅓. Daarna rijdt Bas of Chris. Rijden met één of met twee collega's telt als één rit: een volle auto telt niet zwaarder, want rijden kost evenveel moeite. In een simulatie van 2000 carpooldagen met wisselende aanwezigheid bleef iedereen binnen één rit van zijn eerlijke aandeel.
 
 Gaat er op een dag maar één persoon, dan is er geen carpool. De app toont dan **Geen carpool – alleen … gaat**, wijst geen chauffeur aan, vraagt achteraf niet om de rit in te vullen en zet niets in de agenda.
 

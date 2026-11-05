@@ -48,6 +48,8 @@ table.scoreboard{border-collapse:collapse;font-size:13px}
 .stats-more summary{cursor:pointer;font-weight:750;font-size:14px}
 .stats-more summary .muted{font-weight:400;margin-left:6px}
 .stats-more table{margin-top:14px}
+.stats-more .how{margin-top:12px}
+.stats-more .how p{margin:0 0 6px}
 
 /* Bovenaan: volgende rit + korte agenda, zodat alles op een telefoonscherm past */
 .next-ride{margin-bottom:12px;padding:18px 20px;border-color:var(--soft-border)}

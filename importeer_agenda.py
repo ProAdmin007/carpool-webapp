@@ -4,7 +4,7 @@ Gebruik:  python importeer_agenda.py agenda.ics [--admin Anna]
 
 - Ritten vóór vandaag worden als afgeronde ritten opgeslagen (chauffeur + meerijders).
 - Ritten vanaf vandaag worden alleen als aanwezigheid opgeslagen; de app bepaalt zelf
-  wie er rijdt op basis van het saldo.
+  wie er rijdt op basis van ieders eerlijk aandeel.
 - Onbekende namen krijgen een account met een tijdelijk wachtwoord (wordt getoond).
 Het script is veilig om opnieuw te draaien: bestaande datums worden overschreven.
 """
