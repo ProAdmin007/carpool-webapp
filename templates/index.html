@@ -93,6 +93,18 @@
 </section>
 {% endif %}
 
+<details class="extra-day" id="extra-day">
+  <summary>＋ Extra dag carpoolen</summary>
+  <div class="extra-body">
+    <p class="muted minor">Bijvoorbeeld een vrijdag. Kies de datum: jij gaat dan mee en je collega's krijgen een melding met de vraag of ze ook gaan.</p>
+    <form method="post" action="{{ url_for('add_extra_day') }}" class="extra-form">
+      <input type="hidden" name="csrf" value="{{ csrf }}">
+      <input type="date" name="day" required min="{{ today.isoformat() }}" max="{{ max_extra }}" aria-label="Datum">
+      <button class="primary">Toevoegen</button>
+    </form>
+  </div>
+</details>
+
 {% if coming %}
 <section class="card agenda">
   <div class="agenda-head"><span class="eyebrow">Daarna</span><a class="cal-quick" href="{{ url_for('calendar_page') }}">📅 In je agenda</a></div>
@@ -105,7 +117,6 @@
     </a></li>
   {% endfor %}
   </ul>
-  <a class="extra-link" href="#extra-day">＋ Extra dag carpoolen</a>
 </section>
 {% endif %}
 
@@ -229,19 +240,9 @@
     {% endif %}
   </article>
 {% else %}
-  <section class="card"><h2>Geen carpooldagen in deze periode</h2><p>Wil je toch samen rijden? Voeg hieronder een extra dag toe.</p></section>
+  <section class="card"><h2>Geen carpooldagen in deze periode</h2><p>Wil je toch samen rijden? Tik bovenaan op <strong>＋ Extra dag carpoolen</strong>.</p></section>
 {% endfor %}
 </div>
-
-<details class="card extra-day" id="extra-day">
-  <summary>＋ Extra dag carpoolen? <span class="muted">Bijvoorbeeld een vrijdag</span></summary>
-  <p class="muted minor">Kies de datum. Jij gaat dan mee en je collega's krijgen een melding met de vraag of ze ook gaan.</p>
-  <form method="post" action="{{ url_for('add_extra_day') }}" class="extra-form">
-    <input type="hidden" name="csrf" value="{{ csrf }}">
-    <input type="date" name="day" required min="{{ today.isoformat() }}" max="{{ max_extra }}" aria-label="Datum">
-    <button class="primary">Toevoegen</button>
-  </form>
-</details>
 
 <details class="card stats-more">
   <summary>Hoe wordt dit bepaald? <span class="muted">Bekijk de stand</span></summary>
@@ -266,14 +267,8 @@
 <p class="footnote">Tip: vul alvast volgende week in. De geplande chauffeur kan nog veranderen als iemand zijn aanwezigheid aanpast of een rit wordt afgerond.</p>
 
 <script nonce="{{ csp_nonce }}">
-// Link naar "Extra dag": formulier openklappen en datumveld kiezen.
-function openExtra() {
-  var box = document.getElementById("extra-day");
-  if (box && location.hash === "#extra-day") { box.open = true; var i = box.querySelector("input[type=date]"); if (i) i.focus(); }
-}
-window.addEventListener("hashchange", openExtra);
-openExtra();
-document.querySelectorAll("a[href=\"#extra-day\"]").forEach(function (a) { a.addEventListener("click", function () { setTimeout(openExtra, 0); }); });
+// "Extra dag": na een foutmelding (#extra-day) staat het formulier meteen open.
+if (location.hash === "#extra-day") document.getElementById("extra-day").open = true;
 // Wie rijdt, kan niet ook meerijden: vinkje bij de chauffeur automatisch uitzetten.
 document.querySelectorAll('.finish-form').forEach(function (form) {
   function sync() {
