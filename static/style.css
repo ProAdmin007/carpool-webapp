@@ -6,7 +6,12 @@
 /* Rit afronden, stand en kleine extra's */
 .day.is-today{border-color:var(--soft-border);box-shadow:0 6px 24px rgba(16,142,119,.12)}
 /* Afgeronde rit: compact kaartje */
-.day.day-done{display:flex;align-items:center;gap:12px;padding:12px 16px;align-self:start;box-shadow:none}
+.day.day-compact{padding:12px 16px;align-self:start;box-shadow:none}
+.compact-row{display:flex;align-items:center;gap:12px}
+.done-check.skip{background:var(--neutral);color:var(--text-3)}
+.finish.compact-finish{margin-top:6px}
+.finish.compact-finish>summary{display:block;text-align:right;list-style:none;font-size:11px}
+.finish.compact-finish>summary::-webkit-details-marker{display:none}
 .done-check{width:30px;height:30px;flex-shrink:0;display:grid;place-items:center;border-radius:50%;background:var(--soft);color:var(--accent-text);font-weight:800;font-size:14px}
 .done-main{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}
 .done-main strong{font-size:14px}

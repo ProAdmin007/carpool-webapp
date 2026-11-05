@@ -153,23 +153,65 @@
   <a class="secondary" href="{{ url_for('index', week=offset+1) }}">Later →</a>
 </div>
 
+{% macro finish_form(day) %}
+      <form method="post" action="{{ url_for('confirm', ride_date=day.iso) }}" class="finish-form">
+        <input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="week" value="{{ offset }}">
+        <fieldset>
+          <legend>Wie heeft er gereden?</legend>
+          {% set default_driver = day.driver or me.id %}
+          {% for u in users %}
+          <label class="pick"><input type="radio" name="driver" value="{{ u.id }}" {% if u.id == default_driver %}checked{% endif %} required> {{ u.name }}</label>
+          {% endfor %}
+        </fieldset>
+        <fieldset>
+          <legend>Wie reden er mee?</legend>
+          {% set present_ids = day.present|map(attribute='id')|list %}
+          {% for u in users %}
+          <label class="pick passenger"><input type="checkbox" name="passengers" value="{{ u.id }}" {% if u.id in present_ids and u.id != default_driver %}checked{% endif %}> {{ u.name }}</label>
+          {% endfor %}
+        </fieldset>
+        <button class="primary full">Opslaan</button>
+      </form>
+{% endmacro %}
 <div class="cards">
 {% for day in days %}
   {% if day.done %}
   {#- Afgeronde rit: compact, één kaartje met wie reed en wie mee was. -#}
-  <article class="card day day-done" id="day-{{ day.iso }}">
-    <span class="done-check">✓</span>
-    <div class="done-main">
-      <strong>{{ weekdays[day.date.weekday()] }} {{ short(day.date) }}</strong>
-      <small>{% if day.driver == me.id %}Jij reed{% else %}{{ names.get(day.driver, '?') }} reed{% endif %}{% if day.passengers %} · mee: {{ day.passengers|map(attribute='name')|join(', ') }}{% else %} alleen{% endif %}</small>
+  <article class="card day day-compact" id="day-{{ day.iso }}">
+    <div class="compact-row">
+      <span class="done-check">✓</span>
+      <div class="done-main">
+        <strong>{{ weekdays[day.date.weekday()] }} {{ short(day.date) }}</strong>
+        <small>{% if day.driver == me.id %}Jij reed{% else %}{{ names.get(day.driver, '?') }} reed{% endif %}{% if day.passengers %} · mee: {{ day.passengers|map(attribute='name')|join(', ') }}{% else %} alleen{% endif %}</small>
+      </div>
+      <div class="done-side">
+        {% if since and day.date < since %}<span class="status">Telt niet mee</span>{% else %}<span class="status completed">Afgerond</span>{% endif %}
+        <form method="post" action="{{ url_for('undo', ride_date=day.iso) }}" data-confirm="Rit van {{ day.label }} ongedaan maken?">
+          <input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="week" value="{{ offset }}">
+          <button class="linkbtn done-undo">Ongedaan maken</button>
+        </form>
+      </div>
     </div>
-    <div class="done-side">
-      {% if since and day.date < since %}<span class="status">Telt niet mee</span>{% else %}<span class="status completed">Afgerond</span>{% endif %}
-      <form method="post" action="{{ url_for('undo', ride_date=day.iso) }}" data-confirm="Rit van {{ day.label }} ongedaan maken?">
-        <input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="week" value="{{ offset }}">
-        <button class="linkbtn done-undo">Ongedaan maken</button>
-      </form>
+  </article>
+  {% elif day.past and day.present|length < 2 %}
+  {#- Voorbije dag zonder carpool: compact. Toch gereden? Dan klapt het invulformulier open. -#}
+  <article class="card day day-compact" id="day-{{ day.iso }}">
+    <div class="compact-row">
+      <span class="done-check skip">–</span>
+      <div class="done-main">
+        <strong>{{ weekdays[day.date.weekday()] }} {{ short(day.date) }}</strong>
+        <small>{% if day.solo %}{{ solo_text(day, true) }}{% else %}Niemand ging{% endif %}</small>
+      </div>
+      <div class="done-side">
+        <span class="status">{{ 'Geen carpool' if day.solo else 'Niet gereden' }}</span>
+      </div>
     </div>
+    {% if day.can_confirm %}
+    <details class="finish compact-finish">
+      <summary class="linkbtn">Toch gereden? Invullen</summary>
+      {{ finish_form(day) }}
+    </details>
+    {% endif %}
   </article>
   {% else %}
   <article class="card day {% if day.today %}is-today{% endif %}" id="day-{{ day.iso }}">
@@ -239,24 +281,7 @@
       {% else %}
       <summary class="primary full">Rit afronden: wie reed er?</summary>
       {% endif %}
-      <form method="post" action="{{ url_for('confirm', ride_date=day.iso) }}" class="finish-form">
-        <input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="week" value="{{ offset }}">
-        <fieldset>
-          <legend>Wie heeft er gereden?</legend>
-          {% set default_driver = day.driver or me.id %}
-          {% for u in users %}
-          <label class="pick"><input type="radio" name="driver" value="{{ u.id }}" {% if u.id == default_driver %}checked{% endif %} required> {{ u.name }}</label>
-          {% endfor %}
-        </fieldset>
-        <fieldset>
-          <legend>Wie reden er mee?</legend>
-          {% set present_ids = day.present|map(attribute='id')|list %}
-          {% for u in users %}
-          <label class="pick passenger"><input type="checkbox" name="passengers" value="{{ u.id }}" {% if u.id in present_ids and u.id != default_driver %}checked{% endif %}> {{ u.name }}</label>
-          {% endfor %}
-        </fieldset>
-        <button class="primary full">Opslaan</button>
-      </form>
+      {{ finish_form(day) }}
       {% if day.past %}
       <form method="post" action="{{ url_for('no_ride', ride_date=day.iso) }}" class="undo" data-confirm="Is er op {{ day.label }} echt niet gereden?">
         <input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="week" value="{{ offset }}">
