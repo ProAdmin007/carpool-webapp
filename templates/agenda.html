@@ -7,7 +7,7 @@
 <section class="card cal-card">
   <h2>Toevoegen</h2>
   <div class="cal-buttons">
-    <a class="primary full btn-link" href="{{ webcal_url }}">📅 iPhone / Mac / Outlook-app</a>
+    <a class="primary full btn-link" href="{{ webcal_url }}">📅 iPhone / Mac</a>
     <details class="google-help">
       <summary class="secondary full btn-link">Google Agenda</summary>
       <div class="google-steps">
@@ -21,7 +21,20 @@
         </ol>
       </div>
     </details>
-    <a class="secondary full btn-link" href="{{ outlook_url }}" target="_blank" rel="noopener">Outlook.com / Office 365</a>
+    <details class="google-help">
+      <summary class="secondary full btn-link">Outlook</summary>
+      <div class="google-steps">
+        <p><strong>Let op:</strong> de Outlook-<em>app</em> op je telefoon kan geen agenda toevoegen via een link. Dat moet één keer via Outlook in de browser. Daarna staat hij vanzelf ook in de app.</p>
+        <ol>
+          <li>Open Outlook in de browser, op je computer of in de browser van je telefoon. Deze knoppen vullen de link meteen in:
+            <a class="secondary full btn-link google-open" href="{{ outlook_work_url }}" target="_blank" rel="noopener">Werk- of schoolaccount (Microsoft 365)</a>
+            <a class="secondary full btn-link google-open" href="{{ outlook_url }}" target="_blank" rel="noopener">Privéaccount (Outlook.com, Hotmail)</a></li>
+          <li>Log in als dat gevraagd wordt en klik op <strong>Importeren</strong> of <strong>Abonneren</strong>.</li>
+          <li>Werkt de knop niet? Kies in de agenda links <strong>Agenda toevoegen</strong> en dan <strong>Abonneren vanaf internet</strong>. Plak je link en geef hem de naam Carpool.</li>
+          <li>In de Outlook-app verschijnt Carpool daarna vanzelf. Zie je hem niet? Tik linksboven op het menu en zet <strong>Carpool</strong> aan.</li>
+        </ol>
+      </div>
+    </details>
   </div>
   <p class="muted minor">Werkt een knop niet? Kopieer dan de link hieronder en kies in je agenda "Agenda toevoegen via URL" of "Abonneren".</p>
   <label>Jouw agendalink

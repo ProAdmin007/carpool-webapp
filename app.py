@@ -908,10 +908,11 @@ def calendar_page():
         return redirect(url_for('calendar_page'))
     https_url = url_for('calendar_ics', token=token, _external=True)
     webcal_url = 'webcal://' + https_url.split('://', 1)[1]
+    add_from_web = '/calendar/0/addfromweb?name=Carpool&url=' + quote(https_url, safe='')
     return render_template('agenda.html', https_url=https_url, webcal_url=webcal_url,
                            google_url='https://calendar.google.com/calendar/r?cid=' + quote(https_url, safe=''),
-                           outlook_url='https://outlook.live.com/calendar/0/addfromweb?name=Carpool&url='
-                                       + quote(https_url, safe=''))
+                           outlook_url='https://outlook.live.com' + add_from_web,
+                           outlook_work_url='https://outlook.office.com' + add_from_web)
 
 
 FEEDBACK_MAX_LEN = 2000
