@@ -33,6 +33,9 @@ def test_agendapagina_en_link():
     assert 'webcal://localhost/agenda/' in page and 'calendar.google.com' in page
     assert 'cid=http%3A%2F%2Flocalhost%2Fagenda%2F' in page, 'Google krijgt de https/http-link, geen webcal'
     assert 'Via URL' in page
+    token = url.rsplit('/', 1)[1]
+    assert f'intent://localhost/agenda/{token}#Intent;scheme=webcals;package=at.bitfire.icsdroid;' in page
+    assert 'outlook.office.com/calendar/0/addfromweb' in page and 'outlook.live.com' in page
     assert feed_url(c) == url, 'link blijft hetzelfde'
 
 

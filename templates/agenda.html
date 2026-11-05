@@ -8,6 +8,19 @@
   <h2>Toevoegen</h2>
   <div class="cal-buttons">
     <a class="primary full btn-link" href="{{ webcal_url }}">📅 iPhone / Mac</a>
+    <details class="google-help" id="android-help">
+      <summary class="secondary full btn-link">Android-telefoon (Google of Samsung Agenda)</summary>
+      <div class="google-steps">
+        <p>De agenda-apps op Android kunnen zelf geen agenda via een link toevoegen. De app <strong>ICSx⁵</strong> kan dat wel: die zet de ritten in de agenda van je telefoon, zodat ze in Google Agenda of Samsung Agenda verschijnen.</p>
+        <ol>
+          <li>Tik op de knop hieronder. Heb je ICSx⁵ nog niet, dan opent de Play Store: installeer de app en kom hier terug.
+            <a class="primary full btn-link google-open" href="{{ android_url }}">Toevoegen met ICSx⁵</a></li>
+          <li>Tik in ICSx⁵ op <strong>Volgende</strong> en daarna op <strong>Toevoegen</strong>. Geef toestemming voor de agenda als dat gevraagd wordt.</li>
+          <li>Open je agenda-app. Zie je Carpool niet? Zet hem aan in het menu bij je agenda's.</li>
+        </ol>
+        <p class="muted minor">Opent de knop niets? Open ICSx⁵ zelf, tik op <strong>+</strong> en plak je agendalink (hieronder te kopiëren). ICSx⁵ is in de Play Store een paar euro; via <a class="link" href="{{ icsx5_fdroid }}" target="_blank" rel="noopener">F-Droid</a> is hij gratis. Dit zet de ritten niet in de Outlook-app; zie daarvoor Outlook.</p>
+      </div>
+    </details>
     <details class="google-help">
       <summary class="secondary full btn-link">Google Agenda</summary>
       <div class="google-steps">
@@ -63,6 +76,8 @@
 </section>
 
 <script nonce="{{ csp_nonce }}">
+// Op een Android-telefoon staat de Android-uitleg meteen open.
+if (/Android/i.test(navigator.userAgent)) document.getElementById('android-help').open = true;
 document.getElementById('copy-cal').addEventListener('click', function () {
   var input = document.getElementById('cal-url'), btn = this;
   input.select();
