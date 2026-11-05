@@ -168,8 +168,6 @@ Een dag die al voorbij is en niet is afgerond, telt niet mee. Je kunt hem achter
 
 Onderaan de planning staat **Ritten in je eigen agenda**. Daar vindt iedereen een persoonlijke abonnementslink (`/agenda/<geheime-code>.ics`). Die voeg je één keer toe aan Google Agenda, Outlook of de iPhone-/Mac-agenda. De agenda-app haalt de planning daarna zelf op. De app vraagt om elke 12 uur te verversen. Google ververst meestal één à twee keer per dag.
 
-De agenda-apps op Android (Google, Samsung, Outlook) kunnen zelf geen agenda via een link toevoegen. Op Android opent de knop **Toevoegen met ICSx⁵** daarom de app [ICSx⁵](https://f-droid.org/packages/at.bitfire.icsdroid/) met de link al ingevuld; die zet de ritten in de agenda van de telefoon. Voor de Outlook-app voeg je de link één keer toe via Outlook in de browser.
-
 - In de agenda staan de dagen waarop je gaat, als hele-dag-afspraak die je niet als bezet toont. Ritten tot 8 weken vooruit en 60 dagen terug.
 - Wie de link heeft, kan je ritten zien. Lekt hij uit, klik dan op **Nieuwe link maken**. De oude link werkt dan direct niet meer.
 

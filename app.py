@@ -899,10 +899,6 @@ def calendar_ics(token):
     return resp
 
 
-ICSX5_STORE = 'https://play.google.com/store/apps/details?id=at.bitfire.icsdroid'
-ICSX5_FDROID = 'https://f-droid.org/packages/at.bitfire.icsdroid/'
-
-
 @app.route('/agenda', methods=['GET', 'POST'])
 @login_required
 def calendar_page():
@@ -915,12 +911,7 @@ def calendar_page():
     https_url = url_for('calendar_ics', token=token, _external=True)
     webcal_url = 'webcal://' + https_url.split('://', 1)[1]
     add_from_web = '/calendar/0/addfromweb?name=Carpool&url=' + quote(https_url, safe='')
-    # Android: Chrome-intent dat de link direct in ICSx⁵ opent (webcals = https); niet
-    # geïnstalleerd, dan valt Chrome terug op de Play Store-pagina van de app.
-    android_url = ('intent://' + https_url.split('://', 1)[1] + '#Intent;scheme=webcals;package=at.bitfire.icsdroid;'
-                   'S.browser_fallback_url=' + quote(ICSX5_STORE, safe='') + ';end')
     return render_template('agenda.html', https_url=https_url, webcal_url=webcal_url,
-                           android_url=android_url, icsx5_store=ICSX5_STORE, icsx5_fdroid=ICSX5_FDROID,
                            google_url='https://calendar.google.com/calendar/r?cid=' + quote(https_url, safe=''),
                            outlook_url='https://outlook.live.com' + add_from_web,
                            outlook_work_url='https://outlook.office.com' + add_from_web)
