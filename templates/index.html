@@ -212,6 +212,7 @@
   </table>
   <p class="muted minor">Voor elke collega die met je meerijdt krijg je er 1 bij. Rijd je zelf mee, dan gaat er 1 af. Van wie er die dag gaat, rijdt degene die het laagst staat. Zo rijdt iedereen ongeveer even vaak als hij meerijdt.{% if since %} Ritten tellen mee vanaf {{ short(since) }}.{% endif %}</p>
 </details>
+<a class="card cal-link" href="{{ url_for('calendar_page') }}"><span>📅</span><span><strong>Ritten in je eigen agenda</strong><br><small class="muted">Google, Outlook of iPhone. Synchroniseert vanzelf.</small></span><span class="cal-arrow">›</span></a>
 <p class="footnote">Tip: vul alvast volgende week in. De geplande chauffeur kan nog veranderen als iemand zijn aanwezigheid aanpast of een rit wordt afgerond.</p>
 
 <script nonce="{{ csp_nonce }}">

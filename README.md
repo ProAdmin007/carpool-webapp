@@ -162,6 +162,13 @@ Een dag die al voorbij is en niet is afgerond, telt niet mee. Je kunt hem achter
 
 **Windows, nog makkelijker:** dubbelklik op `start.bat`. Bij de eerste keer installeert die alles automatisch.
 
+## Ritten in je eigen agenda
+
+Onderaan de planning staat **Ritten in je eigen agenda**. Daar vindt iedereen een persoonlijke abonnementslink (`/agenda/<geheime-code>.ics`). Die voeg je één keer toe aan Google Agenda, Outlook of de iPhone-/Mac-agenda. De agenda-app haalt de planning daarna zelf op. De app vraagt om elke 12 uur te verversen. Google ververst meestal één à twee keer per dag.
+
+- In de agenda staan de dagen waarop je gaat, als hele-dag-afspraak die je niet als bezet toont. Ritten tot 8 weken vooruit en 60 dagen terug.
+- Wie de link heeft, kan je ritten zien. Lekt hij uit, klik dan op **Nieuwe link maken**. De oude link werkt dan direct niet meer.
+
 ## Oude agenda importeren
 
 `python importeer_agenda.py agenda.ics --admin Anna` zet ritten uit een .ics-agenda in de app. Ritten van vóór vandaag worden afgeronde ritten, met chauffeur en meerijders. Ritten vanaf vandaag worden alleen aanwezigheid; wie er rijdt, rekent de app zelf uit. Namen die nog niet bestaan krijgen een account met een tijdelijk wachtwoord. Je kunt het script veilig opnieuw draaien.

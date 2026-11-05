@@ -7,9 +7,10 @@ import sqlite3
 import threading
 import time
 from collections import defaultdict
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, timedelta, timezone
 from functools import wraps
 from pathlib import Path
+from urllib.parse import quote
 
 from flask import Flask, abort, flash, g, redirect, render_template, request, send_from_directory, session, url_for
 from flask.sessions import SecureCookieSessionInterface
@@ -108,6 +109,9 @@ def init_db():
     cols = {r['name'] for r in db().execute('PRAGMA table_info(seen_plan)')}
     if 'shown_at' not in cols:  # bestaande database bijwerken
         db().execute('ALTER TABLE seen_plan ADD COLUMN shown_at TEXT')
+    if 'cal_token' not in {r['name'] for r in db().execute('PRAGMA table_info(users)')}:
+        db().execute('ALTER TABLE users ADD COLUMN cal_token TEXT')
+        db().execute('CREATE UNIQUE INDEX IF NOT EXISTS users_cal_token ON users(cal_token)')
     db().commit()
 
 
@@ -683,6 +687,113 @@ def settings():
         return redirect(url_for('settings'))
     return render_template('settings.html', active=enabled_days(), users=all_users(),
                            count_from=count_from(), today=date.today())
+
+
+# --- Agenda-abonnement (iCalendar) -----------------------------------------------
+CAL_PAST = timedelta(days=60)     # zoveel terug staat in de agenda
+CAL_FUTURE = timedelta(weeks=8)   # en zoveel vooruit
+
+
+def ical_escape(text):
+    return (text.replace('\\', '\\\\').replace(';', '\\;').replace(',', '\\,')
+            .replace('\n', '\\n'))
+
+
+def ical_fold(line):
+    """Regels langer dan 75 bytes vouwen, zoals de iCalendar-standaard (RFC 5545) vraagt."""
+    out, cur = [], ''
+    for ch in line:
+        if len((cur + ch).encode('utf-8')) > (75 if not out else 74):
+            out.append(cur)
+            cur = ch
+        else:
+            cur += ch
+    out.append(cur)
+    return '\r\n '.join(out)
+
+
+def calendar_token(user, renew=False):
+    token = user['cal_token']
+    if renew or not token:
+        token = secrets.token_urlsafe(24)
+        db().execute('UPDATE users SET cal_token=? WHERE id=?', (token, user['id']))
+        db().commit()
+    return token
+
+
+def calendar_feed(user):
+    today = date.today()
+    names = {u['id']: u['name'] for u in all_users()}
+    me = user['id']
+    stamp = datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ')
+    host = request.host.split(':')[0]
+    lines = ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//Meerijden//Carpool//NL', 'CALSCALE:GREGORIAN',
+             'METHOD:PUBLISH', 'X-WR-CALNAME:Carpool', 'X-WR-TIMEZONE:Europe/Amsterdam',
+             'REFRESH-INTERVAL;VALUE=DURATION:PT12H', 'X-PUBLISHED-TTL:PT12H']
+    for d in plan_for(today + CAL_FUTURE):
+        if d['date'] < today - CAL_PAST:
+            continue
+        passengers = [u['id'] for u in d['passengers']]
+        if d['done']:
+            if me != d['driver'] and me not in passengers:
+                continue
+            summary = '✓ Jij reed' if d['driver'] == me else f"✓ {names.get(d['driver'], '?')} reed (jij reed mee)"
+            others = [names[p] for p in passengers if p != me and p in names]
+        else:
+            if d['responses'].get(me) != 1:
+                continue      # alleen dagen waarop je gaat
+            if d['driver'] == me:
+                summary = '🚗 Jij rijdt'
+            elif d['driver']:
+                summary = f"🚗 {names[d['driver']]} rijdt (jij rijdt mee)"
+            else:
+                summary = '🚗 Carpool'
+            others = [u['name'] for u in d['present'] if u['id'] != me]
+        desc = []
+        others = [o for o in others if o != names.get(d['driver'])]
+        if others:
+            desc.append(('Je neemt mee: ' if d['driver'] == me else 'Ook mee: ') + ', '.join(others))
+        if not d['done']:
+            desc.append('Gepland; dit kan nog veranderen als iemand zijn aanwezigheid aanpast.')
+        desc.append(url_for('index', _external=True))
+        end = d['date'] + timedelta(days=1)
+        lines += ['BEGIN:VEVENT', f"UID:carpool-{d['iso']}-{me}@{host}", f'DTSTAMP:{stamp}',
+                  f"DTSTART;VALUE=DATE:{d['date']:%Y%m%d}", f'DTEND;VALUE=DATE:{end:%Y%m%d}',
+                  f'SUMMARY:{ical_escape(summary)}', f"DESCRIPTION:{ical_escape(chr(10).join(desc))}",
+                  f"URL:{url_for('index', _external=True)}", 'TRANSP:TRANSPARENT',
+                  'STATUS:CONFIRMED' if d['done'] else 'STATUS:TENTATIVE', 'END:VEVENT']
+    lines.append('END:VCALENDAR')
+    return '\r\n'.join(ical_fold(line) for line in lines) + '\r\n'
+
+
+@app.route('/agenda/<token>.ics')
+def calendar_ics(token):
+    """Openbare (geheime) link voor agenda-apps; die kunnen niet inloggen."""
+    if len(token) < 20:
+        abort(404)
+    user = db().execute('SELECT * FROM users WHERE cal_token=?', (token,)).fetchone()
+    if not user:
+        abort(404)
+    g.user = user
+    resp = app.response_class(calendar_feed(user), mimetype='text/calendar')
+    resp.headers['Content-Disposition'] = 'inline; filename="carpool.ics"'
+    return resp
+
+
+@app.route('/agenda', methods=['GET', 'POST'])
+@login_required
+def calendar_page():
+    renew = request.method == 'POST' and request.form.get('action') == 'renew'
+    token = calendar_token(g.user, renew=renew)
+    if renew:
+        flash('Nieuwe agendalink gemaakt. De oude link werkt niet meer.', 'success')
+        return redirect(url_for('calendar_page'))
+    https_url = url_for('calendar_ics', token=token, _external=True)
+    webcal_url = 'webcal://' + https_url.split('://', 1)[1]
+    return render_template('agenda.html', https_url=https_url, webcal_url=webcal_url,
+                           google_url='https://calendar.google.com/calendar/r?cid=' + quote(webcal_url, safe=''),
+                           outlook_url='https://outlook.live.com/calendar/0/addfromweb?name=Carpool&url='
+                                       + quote(https_url, safe=''))
 
 
 @app.route('/password', methods=['GET', 'POST'])

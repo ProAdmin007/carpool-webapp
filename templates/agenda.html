@@ -1,0 +1,49 @@
+{% extends 'base.html' %}
+{% block content %}
+<a class="back" href="{{ url_for('index') }}">← Terug naar planning</a>
+<h1>Ritten in je agenda</h1>
+<p class="lead">Voeg deze link één keer toe aan je agenda. Je agenda haalt daarna zelf de nieuwste planning op, ongeveer elke 12 uur.</p>
+
+<section class="card cal-card">
+  <h2>Toevoegen</h2>
+  <div class="cal-buttons">
+    <a class="primary full btn-link" href="{{ webcal_url }}">📅 iPhone / Mac / Outlook-app</a>
+    <a class="secondary full btn-link" href="{{ google_url }}" target="_blank" rel="noopener">Google Agenda</a>
+    <a class="secondary full btn-link" href="{{ outlook_url }}" target="_blank" rel="noopener">Outlook.com / Office 365</a>
+  </div>
+  <p class="muted minor">Werkt een knop niet? Kopieer dan de link hieronder en kies in je agenda "Agenda toevoegen via URL" of "Abonneren".</p>
+  <label>Jouw agendalink
+    <input id="cal-url" type="text" readonly value="{{ https_url }}">
+  </label>
+  <button type="button" class="secondary full" id="copy-cal">Link kopiëren</button>
+</section>
+
+<section class="card cal-card">
+  <h2>Wat staat erin?</h2>
+  <ul class="cal-list">
+    <li>De dagen waarop jij naar kantoor gaat, als hele-dag-afspraak, bijvoorbeeld <strong>🚗 Jij rijdt</strong> of <strong>🚗 Bas rijdt (jij rijdt mee)</strong>.</li>
+    <li>Wie er nog meer meegaat staat in de beschrijving.</li>
+    <li>De afspraken tonen je <em>niet</em> als bezet.</li>
+    <li>Verandert de planning, dan past je agenda zich bij de volgende synchronisatie aan.</li>
+  </ul>
+</section>
+
+<section class="card cal-card">
+  <h2>Link gelekt?</h2>
+  <p>Iedereen met deze link kan jouw ritten zien. Deel hem dus niet. Maak je een nieuwe link, dan werkt de oude niet meer en moet je de agenda opnieuw toevoegen.</p>
+  <form method="post" data-confirm="Nieuwe link maken? De oude link werkt dan niet meer.">
+    <input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="action" value="renew">
+    <button class="secondary full">Nieuwe link maken</button>
+  </form>
+</section>
+
+<script nonce="{{ csp_nonce }}">
+document.getElementById('copy-cal').addEventListener('click', function () {
+  var input = document.getElementById('cal-url'), btn = this;
+  input.select();
+  var done = function () { btn.textContent = 'Gekopieerd ✓'; setTimeout(function () { btn.textContent = 'Link kopiëren'; }, 2000); };
+  if (navigator.clipboard) { navigator.clipboard.writeText(input.value).then(done, function () { document.execCommand('copy'); done(); }); }
+  else { document.execCommand('copy'); done(); }
+});
+</script>
+{% endblock %}
