@@ -314,8 +314,9 @@ def ride_history():
 class Ledger:
     """Houdt per persoon een saldo bij: rijden levert +1 per meerijder op, meerijden kost 1.
 
-    Wie het laagste saldo heeft (dus vaker meereed dan reed), is de volgende chauffeur.
-    Het totaal van alle saldi is altijd 0, dus over tijd middelt het eerlijk uit.
+    Er wordt ook per tweetal bijgehouden wie wie heeft gereden (`owed`). Bij het kiezen tellen
+    alleen de verhoudingen met de collega's die die dag gaan: zo betaalt niemand de schuld van
+    een afwezige collega af. Als iedereen er is, komt dit precies overeen met het totale saldo.
     """
 
     def __init__(self, users):
@@ -323,6 +324,7 @@ class Ledger:
         self.drives = {u['id']: 0 for u in users}
         self.rides_along = {u['id']: 0 for u in users}
         self.last = {u['id']: '0000-00-00' for u in users}
+        self.owed = defaultdict(int)   # (a, b): keer dat a b reed, min keer dat b a reed
 
     def add(self, iso, driver, passengers):
         passengers = [p for p in passengers if p != driver and p in self.balance]
@@ -333,10 +335,19 @@ class Ledger:
         for p in passengers:
             self.balance[p] -= 1
             self.rides_along[p] += 1
+            if driver in self.balance:
+                self.owed[(driver, p)] += 1
+                self.owed[(p, driver)] -= 1
+
+    def score(self, uid, present_ids):
+        """Saldo van `uid` alleen ten opzichte van de collega's die er die dag zijn."""
+        return sum(self.owed[(uid, v)] for v in present_ids if v != uid)
 
     def pick(self, present):
-        # Laagste saldo eerst; bij gelijkstand wie het langst niet reed, daarna minst gereden.
-        return min(present, key=lambda u: (self.balance[u['id']], self.last[u['id']],
+        # Laagste saldo t.o.v. de aanwezigen eerst; bij gelijkstand wie het langst niet reed,
+        # daarna minst gereden.
+        ids = [u['id'] for u in present]
+        return min(present, key=lambda u: (self.score(u['id'], ids), self.last[u['id']],
                                            self.drives[u['id']], u['id']))['id']
 
 

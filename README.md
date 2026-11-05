@@ -153,7 +153,7 @@ docker compose cp carpool:/data/backup.sqlite3 ./backup.sqlite3
 1. De beheerder kiest de vaste dagen onder **Instellingen** (standaard maandag en donderdag). Een dag erbij is één vinkje.
 2. Iedereen klikt per dag op **Ja, ik ga** of **Nee**. Je ziet twee weken vooruit, dus je kunt een week van tevoren invullen.
 3. Na de rit klikt iemand op **Rit afronden: wie reed er?**, kiest wie er reed en vinkt aan wie er meereed. Dat mag iemand anders zijn dan de geplande chauffeur.
-4. Iedereen heeft een **saldo**. De chauffeur krijgt +1 per meerijder en iedere meerijder krijgt −1. Van de mensen die die dag gaan, rijdt degene met het **laagste saldo**. Bij gelijkstand rijdt wie het langst niet heeft gereden.
+4. Iedereen heeft een **saldo**. De chauffeur krijgt +1 per meerijder en iedere meerijder krijgt −1. De app houdt ook per tweetal bij wie wie heeft gereden. Van de mensen die die dag gaan, rijdt degene die **bij de anderen van die dag het meest achterstaat**. Wie er niet is telt die dag niet mee, zodat niemand de schuld van een afwezige collega afbetaalt. Bij gelijkstand rijdt wie het langst niet heeft gereden.
 5. De planning voor de komende dagen wordt meteen opnieuw berekend. Een verkeerd ingevulde rit maak je ongedaan met **Klopt niet? Ongedaan maken**.
 
 Voorbeeld: Anna rijdt met Bas en Chris mee. Anna staat dan op +2, Bas en Chris op −1. Daarna rijdt Bas of Chris. Rijdt Anna alleen met Bas, dan krijgt alleen Bas er −1 bij.

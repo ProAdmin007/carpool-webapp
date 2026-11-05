@@ -252,6 +252,21 @@ def test_alleen_gereden_telt_niet():
     assert L.balance == {1: 0, 2: 0, 3: 0} and L.drives[2] == 1
 
 
+def test_niemand_betaalt_schuld_van_afwezige_af():
+    """Bas reed Anna en Chris. Daarna gaan alleen Bas en Chris, twee keer:
+    Chris rijdt één keer terug, de tweede keer is Bas weer aan de beurt (Anna's schuld blijft bij Anna)."""
+    users = [{'id': 1}, {'id': 2}, {'id': 3}]
+    L = A.Ledger(users)
+    L.add('2026-01-01', 2, [1, 3])
+    two = [{'id': 2}, {'id': 3}]
+    first = L.pick(two)
+    assert first == 3
+    L.add('2026-01-05', first, [2])
+    assert L.pick(two) == 2, 'Chris hoeft niet voor Anna bij te rijden'
+    L.add('2026-01-08', 2, [3])
+    assert L.pick(users) == 1, 'met iedereen erbij is Anna aan de beurt'
+
+
 def test_dubbel_afronden_en_dubbelklik():
     fresh()
     a, _ = login('Bas')

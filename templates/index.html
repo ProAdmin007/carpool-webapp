@@ -210,7 +210,7 @@
     {% endfor %}
     </tbody>
   </table>
-  <p class="muted minor">Voor elke collega die met je meerijdt krijg je er 1 bij. Rijd je zelf mee, dan gaat er 1 af. Van wie er die dag gaat, rijdt degene die het laagst staat. Zo rijdt iedereen ongeveer even vaak als hij meerijdt.{% if since %} Ritten tellen mee vanaf {{ short(since) }}.{% endif %}</p>
+  <p class="muted minor">Voor elke collega die met je meerijdt krijg je er 1 bij. Rijd je zelf mee, dan gaat er 1 af. Van wie er die dag gaat, rijdt degene die bij de anderen van die dag het meest achterstaat. Wie er niet is, telt die dag niet mee, zodat niemand voor een ander hoeft bij te rijden. Zo rijdt iedereen ongeveer even vaak als hij meerijdt.{% if since %} Ritten tellen mee vanaf {{ short(since) }}.{% endif %}</p>
 </details>
 <a class="card cal-link" href="{{ url_for('calendar_page') }}"><span>📅</span><span><strong>Ritten in je eigen agenda</strong><br><small class="muted">Google, Outlook of iPhone. Synchroniseert vanzelf.</small></span><span class="cal-arrow">›</span></a>
 <a class="card cal-link" href="{{ url_for('feedback') }}"><span>💬</span><span><strong>Feedback of een idee?</strong><br><small class="muted">Laat weten wat beter kan.</small></span><span class="cal-arrow">›</span></a>
