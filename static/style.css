@@ -86,6 +86,10 @@ table.scoreboard{border-collapse:collapse;font-size:13px}
 .day-extra-remove{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:16px;padding-top:14px;border-top:1px solid var(--border);font-size:12px}
 .extra-form{display:flex;gap:10px;flex-wrap:wrap}
 .extra-form input[type=date]{flex:1 1 160px;min-width:0}
+.extra-with{flex:1 1 100%;order:1;border:1px solid var(--border);border-radius:12px;padding:10px 12px;margin:0;display:flex;flex-wrap:wrap;gap:8px;min-width:0}
+.extra-with legend{font-weight:750;font-size:13px;padding:0 6px}
+.extra-with .pick{display:flex;font-size:14px}
+.extra-form > .primary{order:2;flex:1 1 100%}
 
 /* Bovenaan: volgende rit + korte agenda, zodat alles op een telefoonscherm past */
 .next-ride{margin-bottom:12px;padding:18px 20px;border-color:var(--soft-border)}

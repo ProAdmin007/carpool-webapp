@@ -57,7 +57,7 @@ def fresh():
     with A.app.app_context():
         A.init_db()
         db = A.db()
-        for t in ('ride_passengers', 'rides', 'attendance', 'seen_plan', 'feedback', 'audit_log', 'extra_days', 'push_subscriptions', 'push_known', 'push_sent', 'users'):
+        for t in ('ride_passengers', 'rides', 'attendance', 'seen_plan', 'feedback', 'audit_log', 'extra_days', 'extra_day_guests', 'push_subscriptions', 'push_known', 'push_sent', 'users'):
             db.execute(f'DELETE FROM {t}')
         db.execute("DELETE FROM settings WHERE key != 'weekdays'")
         db.execute("UPDATE settings SET value='0,3' WHERE key='weekdays'")

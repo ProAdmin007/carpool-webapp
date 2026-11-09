@@ -151,6 +151,14 @@ def init_db():
           created_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
           created_at TEXT NOT NULL
         );
+        -- Collega's die door een ander voor een extra dag zijn aangemeld en dat nog niet zelf
+        -- hebben bevestigd. Verdwijnt zodra ze zelf Ja of Nee kiezen.
+        CREATE TABLE IF NOT EXISTS extra_day_guests (
+          ride_date TEXT NOT NULL,
+          user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+          added_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+          PRIMARY KEY (ride_date, user_id)
+        );
         CREATE TABLE IF NOT EXISTS settings (
           key TEXT PRIMARY KEY,
           value TEXT NOT NULL
@@ -427,7 +435,10 @@ def plan_for(end):
     today = date.today()
     active = enabled_days()
     extra = extra_days()
-    first = min([date.fromisoformat(d) for d in rides] + [monday(today) - timedelta(weeks=1)])
+    guests = defaultdict(dict)   # datum -> {aangemelde collega: door wie}
+    for r in db().execute('SELECT ride_date, user_id, added_by FROM extra_day_guests'):
+        guests[r['ride_date']][r['user_id']] = r['added_by']
+    first =min([date.fromisoformat(d) for d in rides] + [monday(today) - timedelta(weeks=1)])
     days = []
     d = first
     while d <= end:
@@ -437,7 +448,7 @@ def plan_for(end):
             present = [u for u in users if attendance[iso].get(u['id']) == 1]
             info = {'date': d, 'iso': iso, 'label': fmt(d), 'present': present,
                     'extra': iso in extra and d.weekday() not in active, 'extra_by': extra.get(iso),
-                    'responses': attendance[iso], 'done': ride is not None,
+                    'guests': guests.get(iso, {}), 'responses': attendance[iso], 'done': ride is not None,
                     'past': d < today, 'today': d == today,
                     'can_confirm': d <= today and not ride}
             if ride:
@@ -632,8 +643,9 @@ def index():
     coming = [d for d in plan if d['date'] >= today and not d['done']]
     users = all_users()
     # Nieuwe extra dagen van een ander waarop jij nog niet hebt gereageerd.
+    # Of waarvoor een collega je heeft aangemeld en je nog niet zelf hebt bevestigd.
     extra_invites = [d for d in coming if d['extra'] and d['extra_by'] != g.user['id']
-                     and g.user['id'] not in d['responses']]
+                     and (g.user['id'] not in d['responses'] or g.user['id'] in d['guests'])]
     return render_template('index.html', days=display, users=users, extra_invites=extra_invites,
                            upcoming_extra=[d for d in coming if d['extra']],
                            max_extra=(today + timedelta(days=365)).isoformat(),
@@ -720,6 +732,8 @@ def set_attendance(ride_date):
     db().execute('INSERT INTO attendance(user_id,ride_date,going) VALUES (?,?,?) '
                  'ON CONFLICT(user_id,ride_date) DO UPDATE SET going=excluded.going',
                  (g.user['id'], ride_date, int(going)))
+    # Zelf gekozen: niet langer 'aangemeld door een collega'.
+    db().execute('DELETE FROM extra_day_guests WHERE ride_date=? AND user_id=?', (ride_date, g.user['id']))
     db().commit()
     audit('attendance', f"{fmt(d)}: {'gaat' if going == '1' else 'gaat niet'}")
     flash('Je aanwezigheid is bijgewerkt.', 'success')
@@ -795,8 +809,20 @@ MAX_EXTRA_DAYS = 30   # hoeveel toekomstige extra dagen er tegelijk mogen zijn (
 @app.post('/extra-day')
 @login_required
 def add_extra_day():
-    """Iedereen kan een losse extra carpooldag toevoegen; wie hem toevoegt gaat zelf mee."""
+    """Iedereen kan een losse extra carpooldag toevoegen; wie hem toevoegt gaat zelf mee.
+
+    Collega's die je aanvinkt (`with`) staan meteen op 'gaat mee'; zij krijgen een melding
+    en kunnen zelf nog Nee kiezen.
+    """
     raw = request.form.get('day', '')
+    names = {u['id']: u['name'] for u in all_users()}
+    try:
+        guests = {int(x) for x in request.form.getlist('with')}
+    except ValueError:
+        abort(400)
+    if not guests <= names.keys():
+        abort(400)
+    guests.discard(g.user['id'])
     try:
         d = date.fromisoformat(raw)
     except ValueError:
@@ -817,9 +843,19 @@ def add_extra_day():
                  (d.isoformat(), g.user['id'], datetime.now().isoformat(timespec='seconds')))
     db().execute('INSERT INTO attendance(user_id,ride_date,going) VALUES (?,?,1) '
                  'ON CONFLICT(user_id,ride_date) DO UPDATE SET going=1', (g.user['id'], d.isoformat()))
+    for uid in sorted(guests):
+        db().execute('INSERT INTO attendance(user_id,ride_date,going) VALUES (?,?,1) '
+                     'ON CONFLICT(user_id,ride_date) DO UPDATE SET going=1', (uid, d.isoformat()))
+        db().execute('INSERT OR REPLACE INTO extra_day_guests(ride_date,user_id,added_by) VALUES (?,?,?)',
+                     (d.isoformat(), uid, g.user['id']))
     db().commit()
-    audit('extra_day_add', fmt(d))
-    flash(f'{fmt(d)} is toegevoegd en jij gaat mee. Je collega\'s zien een melding.', 'success')
+    with_names = [names[u] for u in sorted(guests)]
+    audit('extra_day_add', fmt(d) + (f", met {', '.join(with_names)}" if with_names else ''))
+    if with_names:
+        who = ' en '.join([', '.join(with_names[:-1]), with_names[-1]] if len(with_names) > 1 else with_names)
+        flash(f'{fmt(d)} is toegevoegd: jij en {who} gaan mee. Zij krijgen een melding en kunnen nog Nee kiezen.', 'success')
+    else:
+        flash(f'{fmt(d)} is toegevoegd en jij gaat mee. Je collega\'s zien een melding.', 'success')
     return redirect(url_for('index', week=week) + f'#day-{d.isoformat()}')
 
 
@@ -833,12 +869,14 @@ def remove_extra_day(ride_date):
         return redirect(url_for('index'))
     if d < date.today() or db().execute('SELECT 1 FROM rides WHERE ride_date=?', (ride_date,)).fetchone():
         abort(400, 'Een extra dag die al voorbij of afgerond is, kun je niet meer verwijderen.')
-    others = db().execute('SELECT COUNT(*) FROM attendance WHERE ride_date=? AND going=1 AND user_id!=?',
-                          (ride_date, g.user['id'])).fetchone()[0]
+    # Alleen collega's die zelf 'ja' zeiden houden de dag vast; wie jij hebt aangemeld niet.
+    others = db().execute('SELECT COUNT(*) FROM attendance a WHERE a.ride_date=? AND a.going=1 AND a.user_id!=? '
+                          'AND NOT EXISTS (SELECT 1 FROM extra_day_guests x WHERE x.ride_date=a.ride_date '
+                          'AND x.user_id=a.user_id)', (ride_date, g.user['id'])).fetchone()[0]
     if others and not g.user['is_admin']:
         flash('Er gaan al collega\'s mee, dus de dag blijft staan. Kun je zelf niet? Kies dan "Nee".', 'error')
         return back_to(ride_date)
-    for table in ('extra_days', 'attendance', 'seen_plan'):
+    for table in ('extra_days', 'extra_day_guests', 'attendance', 'seen_plan'):
         db().execute(f'DELETE FROM {table} WHERE ride_date=?', (ride_date,))  # nosec B608 - vaste tabelnamen
     db().commit()
     audit('extra_day_remove', fmt(d))
@@ -1237,11 +1275,18 @@ def collect_notifications(now, actors=()):
         if not d['extra']:
             continue
         for uid in subscribed:
-            if d['extra_by'] != uid and uid not in d['responses'] and (uid, 'uitnodiging', d['iso']) not in sent_keys:
-                out.append((uid, {'title': f"＋ {names.get(d['extra_by'], 'Een collega')} wil ook op {d['label'].lower()} carpoolen",
-                                  'body': 'Ga je mee? Tik om het in te vullen.', 'url': f"/#day-{d['iso']}",
-                                  'tag': f"extra-{d['iso']}"}))
-                mark(uid, 'uitnodiging', d['iso'])
+            if (uid, 'uitnodiging', d['iso']) in sent_keys or d['extra_by'] == uid:
+                continue
+            by = names.get(d['guests'].get(uid) or d['extra_by'], 'Een collega')
+            if uid in d['guests']:
+                body = ('Jij staat gepland als chauffeur. ' if d['driver'] == uid else '') + 'Kun je niet? Tik om Nee te kiezen.'
+                msg = {'title': f"＋ {by} heeft je aangemeld voor {d['label'].lower()}", 'body': body}
+            elif uid not in d['responses']:
+                msg = {'title': f"＋ {by} wil ook op {d['label'].lower()} carpoolen", 'body': 'Ga je mee? Tik om het in te vullen.'}
+            else:
+                continue
+            out.append((uid, dict(msg, url=f"/#day-{d['iso']}", tag=f"extra-{d['iso']}")))
+            mark(uid, 'uitnodiging', d['iso'])
 
     # 3. De avond ervoor: wie rijdt er morgen?
     tomorrow = by_iso.get((today + timedelta(days=1)).isoformat())

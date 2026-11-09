@@ -160,7 +160,7 @@ docker compose cp carpool:/data/backup.sqlite3 ./backup.sqlite3
 
 Voorbeeld: Anna rijdt met Bas en Chris. Iedereen krijgt ⅓ aandeel; Anna staat op +⅔, Bas en Chris op −⅓. Daarna rijdt Bas of Chris. Rijden met één of met twee collega's telt als één rit: een volle auto telt niet zwaarder, want rijden kost evenveel moeite. In een simulatie van 2000 carpooldagen met wisselende aanwezigheid bleef iedereen binnen één rit van zijn eerlijke aandeel.
 
-**Extra dag:** wil een paar collega's ook op een andere dag samen rijden (bijvoorbeeld vrijdag), dan kan iedereen via **＋ Extra dag carpoolen** een losse datum toevoegen. Wie hem toevoegt gaat zelf mee; de anderen zien bovenaan een melding met de vraag of ze ook gaan. Zo'n dag werkt verder als een gewone carpooldag (chauffeur, afronden, agenda). Bij **＋ Extra dag carpoolen** staan ook de geplande extra dagen, met een knop **Verwijderen** (de app vraagt eerst of je het zeker weet). Dat kan zolang er nog niemand anders "ja" heeft gezegd; de beheerder kan het altijd. Een vaste extra weekdag zet de beheerder aan onder **Instellingen**.
+**Extra dag:** wil een paar collega's ook op een andere dag samen rijden (bijvoorbeeld vrijdag), dan kan iedereen via **＋ Extra dag carpoolen** een losse datum toevoegen. Wie hem toevoegt gaat zelf mee en kan meteen collega's aanvinken onder **Wie gaan er mee?**. Die staan dan op "gaat mee", zien bovenaan "… heeft je aangemeld" (en krijgen een melding) en kunnen nog zelf Nee kiezen. Wie niet is aangevinkt, ziet de vraag of ze ook gaan. Zo'n dag werkt verder als een gewone carpooldag (chauffeur, afronden, agenda). Bij **＋ Extra dag carpoolen** staan ook de geplande extra dagen, met een knop **Verwijderen** (de app vraagt eerst of je het zeker weet). Dat kan zolang er nog niemand anders zelf "ja" heeft gezegd (collega's die jij hebt aangevinkt tellen niet); de beheerder kan het altijd. Een vaste extra weekdag zet de beheerder aan onder **Instellingen**.
 
 Gaat er op een dag maar één persoon, dan is er geen carpool. De app toont dan **Geen carpool – alleen … gaat**, wijst geen chauffeur aan, vraagt achteraf niet om de rit in te vullen en zet niets in de agenda.
 
@@ -182,7 +182,7 @@ Onderaan de planning staat **🔔 Meldingen op je telefoon**. Daar zet je per ap
 - als de planning verandert en jij moet nu rijden, of juist niet meer (de komende 8 dagen);
 - de avond ervoor vanaf 19:00: wie er morgen rijdt, of de vraag of je morgen gaat als je dat nog niet hebt ingevuld;
 - na de rit vanaf 17:30: de vraag wie er gereden heeft, als dat nog niet is ingevuld;
-- als een collega een extra dag toevoegt.
+- als een collega een extra dag toevoegt, of jou daarvoor aanmeldt.
 
 Wat je zelf aanpast, krijg je niet nog eens als melding. Elke melding wordt maar één keer gestuurd.
 

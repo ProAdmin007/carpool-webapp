@@ -127,6 +127,58 @@ def test_te_veel_extra_dagen():
     assert FRI.isoformat() not in [r[0] for r in extra_rows()]
 
 
+def going(day):
+    with A.app.app_context():
+        return dict(A.db().execute('SELECT user_id, going FROM attendance WHERE ride_date=?', (day.isoformat(),)).fetchall())
+
+
+def test_collegas_meteen_aanmelden():
+    fresh()
+    bas, _ = login('Bas')
+    page = text(bas.get('/'))
+    assert 'Wie gaan er mee?' in page and 'name="with" value="1"' in page and 'name="with" value="2"' not in page
+    r = post(bas, '/extra-day', day=FRI.isoformat(), **{'with': ['1', '2']})   # Anna (en zichzelf: genegeerd)
+    assert r.status_code == 302
+    assert going(FRI) == {1: 1, 2: 1}, 'Bas en Anna gaan, Chris nog niet ingevuld'
+    assert 'jij en Anna gaan mee' in text(bas.get('/'))
+    with A.app.test_request_context():
+        day = next(d for d in A.plan_for(FRI) if d['iso'] == FRI.isoformat())
+    assert day['driver'] in (1, 2) and day['guests'] == {1: 2}
+    # Anna ziet dat Bas haar heeft aangemeld; Chris krijgt de gewone vraag.
+    anna, _ = login('Anna')
+    assert 'Bas heeft je aangemeld voor vrijdag' in text(anna.get('/'))
+    chris, _ = login('Chris')
+    assert 'Bas wil ook op vrijdag' in text(chris.get('/'))
+    # Anna bevestigt zelf: de melding verdwijnt. Of kiest Nee: dan gaat ze niet.
+    post(anna, f'/attendance/{FRI}', going='0')
+    assert going(FRI)[1] == 0 and 'heeft je aangemeld' not in text(anna.get('/'))
+
+
+def test_aangemelde_collega_houdt_de_dag_niet_vast():
+    fresh()
+    bas, _ = login('Bas')
+    post(bas, '/extra-day', day=FRI.isoformat(), **{'with': ['3']})
+    assert 'Verwijderen' in text(bas.get('/')), 'Chris heeft nog niet zelf ja gezegd'
+    post(bas, f'/extra-day/{FRI}/remove')
+    assert extra_rows() == [] and going(FRI) == {}
+    with A.app.app_context():
+        assert A.db().execute('SELECT COUNT(*) FROM extra_day_guests').fetchone()[0] == 0
+    # Zegt Chris zelf ja, dan blijft de dag staan.
+    post(bas, '/extra-day', day=FRI.isoformat(), **{'with': ['3']})
+    chris, _ = login('Chris')
+    post(chris, f'/attendance/{FRI}', going='1')
+    post(bas, f'/extra-day/{FRI}/remove')
+    assert extra_rows() == [(FRI.isoformat(), 2)]
+
+
+def test_onbekende_collega_aanmelden_kan_niet():
+    fresh()
+    bas, _ = login('Bas')
+    assert post(bas, '/extra-day', day=FRI.isoformat(), **{'with': ['999']}).status_code == 400
+    assert post(bas, '/extra-day', day=FRI.isoformat(), **{'with': ['x']}).status_code == 400
+    assert extra_rows() == []
+
+
 if __name__ == '__main__':
     failed = 0
     for name, fn in list(globals().items()):

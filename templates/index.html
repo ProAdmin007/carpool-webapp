@@ -19,8 +19,13 @@
 {% for day in extra_invites %}
 <a class="notice info" href="{{ url_for('index', week=week_of(day.date)) }}#day-{{ day.iso }}">
   <span class="notice-icon">＋</span>
+  {% if me.id in day.guests %}
+  <span><strong>{{ names.get(day.guests[me.id] or day.extra_by, 'Iemand') }} heeft je aangemeld voor {{ day.label|lower }}.</strong><br>
+  <small>{% if day.driver == me.id %}Jij staat gepland als chauffeur. {% endif %}Klopt dat? Tik hier om Ja of Nee te kiezen.</small></span>
+  {% else %}
   <span><strong>{{ names.get(day.extra_by, 'Iemand') }} wil ook op {{ day.label|lower }} carpoolen.</strong><br>
   <small>Ga je mee? Tik hier om het in te vullen.</small></span>
+  {% endif %}
 </a>
 {% endfor %}
 <div class="notice info push-prompt" id="push-prompt" hidden>
@@ -102,24 +107,35 @@
 
 {% macro remove_extra_form(day, week=0) %}
   {#- Verwijderen kan zolang er nog niemand anders meegaat; de beheerder kan het altijd. -#}
+  {#- Wie jij zelf hebt aangemeld en nog niet bevestigde, houdt de dag niet vast. -#}
   {% set others_going = day.present|rejectattr('id', 'equalto', me.id)|map(attribute='name')|list %}
-  {% if me.is_admin or not others_going %}
+  {% set confirmed_others = day.present|rejectattr('id', 'equalto', me.id)|rejectattr('id', 'in', day.guests.keys()|list)|map(attribute='name')|list %}
+  {% if me.is_admin or not confirmed_others %}
   <form method="post" action="{{ url_for('remove_extra_day', ride_date=day.iso) }}" class="remove-extra"
         data-confirm="Weet je zeker dat je de extra dag op {{ day.label|lower }} wilt verwijderen?{% if others_going %} {{ others_going|join(' en ') }} {{ 'gaat' if others_going|length == 1 else 'gaan' }} al mee en {{ 'krijgt' if others_going|length == 1 else 'krijgen' }} dan geen rit.{% endif %}">
     <input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="week" value="{{ week }}">
     <button class="remove-btn">Verwijderen</button>
   </form>
   {% else %}
-  <span class="muted remove-no">{{ others_going|join(' en ') }} {{ 'gaat' if others_going|length == 1 else 'gaan' }} al mee</span>
+  <span class="muted remove-no">{{ confirmed_others|join(' en ') }} {{ 'gaat' if confirmed_others|length == 1 else 'gaan' }} al mee</span>
   {% endif %}
 {% endmacro %}
 <details class="extra-day" id="extra-day">
   <summary>＋ Extra dag carpoolen{% if upcoming_extra %} <span class="extra-count">· {{ upcoming_extra|length }} gepland</span>{% endif %}</summary>
   <div class="extra-body">
-    <p class="muted minor">Bijvoorbeeld een vrijdag. Kies de datum: jij gaat dan mee en je collega's krijgen een melding met de vraag of ze ook gaan.</p>
+    <p class="muted minor">Bijvoorbeeld een vrijdag. Jij gaat mee; vink aan wie er nog meer gaan. Zij krijgen een melding en kunnen nog Nee kiezen. Wie je niet aanvinkt, krijgt de vraag of ze ook gaan.</p>
     <form method="post" action="{{ url_for('add_extra_day') }}" class="extra-form">
       <input type="hidden" name="csrf" value="{{ csrf }}">
       <input type="date" name="day" required min="{{ today.isoformat() }}" max="{{ max_extra }}" aria-label="Datum">
+      {% set colleagues = users|rejectattr('id', 'equalto', me.id)|list %}
+      {% if colleagues %}
+      <fieldset class="extra-with">
+        <legend>Wie gaan er mee?</legend>
+        {% for u in colleagues %}
+        <label class="pick passenger"><input type="checkbox" name="with" value="{{ u.id }}"> {{ u.name }}</label>
+        {% endfor %}
+      </fieldset>
+      {% endif %}
       <button class="primary">Toevoegen</button>
     </form>
     {% if upcoming_extra %}

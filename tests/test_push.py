@@ -76,6 +76,11 @@ def at(hour, minute=0, day=None):
     return datetime.combine(day or TODAY, time(hour, minute))
 
 
+def free_days():
+    """Dagen binnen de meldingshorizon die geen vaste carpooldag zijn (onafhankelijk van vandaag)."""
+    return [TODAY + timedelta(days=i) for i in range(1, 8) if (TODAY + timedelta(days=i)).weekday() not in (0, 3)]
+
+
 def all_days_active():
     with A.app.app_context():
         A.db().execute("UPDATE settings SET value='0,1,2,3,4,5,6' WHERE key='weekdays'")
@@ -181,15 +186,29 @@ def test_na_de_rit_vragen_wie_er_reed():
 
 def test_uitnodiging_extra_dag():
     fresh()
-    fri = FUT + timedelta(days=4)
+    fri = free_days()[0]
     _, ea = subscribe('Anna')
     _, eb = subscribe('Bas')
     bas, _ = login('Bas')
     post(bas, '/extra-day', day=fri.isoformat())
     sent = run(at(12), actors={2})
-    assert any('Bas wil ook op vrijdag' in m['title'] for e, m in sent if e == ea)
+    assert any('Bas wil ook op' in m['title'] for e, m in sent if e == ea)
     assert not [m for e, m in sent if e == eb]
     assert not [m for e, m in run(at(12)) if 'wil ook op' in m['title']]
+
+
+def test_aangemeld_voor_extra_dag():
+    fresh()
+    sat = free_days()[1]
+    _, ea = subscribe('Anna')
+    _, ec_ = subscribe('Chris')
+    bas, _ = login('Bas')
+    post(bas, '/extra-day', day=sat.isoformat(), **{'with': ['1']})
+    sent = run(at(12), actors={2})
+    titles = titles_for(sent, ea)
+    assert len(titles) == 1 and titles[0].startswith('＋ Bas heeft je aangemeld voor '), titles
+    assert any('Kun je niet?' in m['body'] for e, m in sent if e == ea)
+    assert any('Bas wil ook op' in m['title'] for e, m in sent if e == ec_)
 
 
 def test_verlopen_abonnement_wordt_opgeruimd():
