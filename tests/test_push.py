@@ -42,6 +42,7 @@ def fake_send(subscription, message, key, contact, **kw):
     return 201
 
 
+REAL_SEND = push.send
 A.push.send = fake_send
 
 
@@ -95,6 +96,35 @@ def test_versleuteling_en_vapid():
     token = header.split('t=')[1].split(',')[0]
     claims = json.loads(push.b64u_decode(token.split('.')[1]))
     assert claims['aud'] == 'https://fcm.googleapis.com' and claims['sub'] == 'https://example.org'
+
+
+def test_versturen_controleert_certificaat_via_systeem():
+    # Apple's push-server faalde met Python's eigen certificaatlijst op Windows; send() moet
+    # de truststore-context (certificaatopslag van het systeem) gebruiken.
+    import truststore
+    import urllib.request
+    seen = {}
+
+    class Resp:
+        status = 201
+        def __enter__(self): return self
+        def __exit__(self, *a): return False
+
+    def fake_urlopen(req, timeout, context):
+        seen.update(ctx=context, url=req.full_url, headers=dict(req.header_items()))
+        return Resp()
+
+    real = urllib.request.urlopen
+    urllib.request.urlopen = fake_urlopen
+    try:
+        receiver = ec.generate_private_key(ec.SECP256R1())
+        sub = {'endpoint': 'https://web.push.apple.com/abc', 'p256dh': push.b64u(push.raw_public(receiver)),
+               'auth': push.b64u(os.urandom(16))}
+        assert REAL_SEND(sub, {'title': 'x'}, A.vapid_key(), A.PUSH_CONTACT) == 201
+    finally:
+        urllib.request.urlopen = real
+    assert isinstance(seen['ctx'], truststore.SSLContext) and seen['url'] == sub['endpoint']
+    assert seen['headers']['Authorization'].startswith('vapid t=') and seen['headers']['Ttl']
 
 
 def test_alleen_echte_push_diensten():

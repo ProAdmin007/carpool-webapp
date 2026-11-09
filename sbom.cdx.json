@@ -16,8 +16,8 @@
       "version": "3.1.3"
     },
     {
-      "bom-ref": "requirements-L9",
-      "description": "requirements line 9: Jinja2==3.1.6",
+      "bom-ref": "requirements-L10",
+      "description": "requirements line 10: Jinja2==3.1.6",
       "externalReferences": [
         {
           "comment": "implicit dist url",
@@ -31,8 +31,8 @@
       "version": "3.1.6"
     },
     {
-      "bom-ref": "requirements-L10",
-      "description": "requirements line 10: MarkupSafe==3.0.4",
+      "bom-ref": "requirements-L11",
+      "description": "requirements line 11: MarkupSafe==3.0.4",
       "externalReferences": [
         {
           "comment": "implicit dist url",
@@ -46,8 +46,8 @@
       "version": "3.0.4"
     },
     {
-      "bom-ref": "requirements-L11",
-      "description": "requirements line 11: Werkzeug==3.1.9",
+      "bom-ref": "requirements-L12",
+      "description": "requirements line 12: Werkzeug==3.1.9",
       "externalReferences": [
         {
           "comment": "implicit dist url",
@@ -61,8 +61,8 @@
       "version": "3.1.9"
     },
     {
-      "bom-ref": "requirements-L6",
-      "description": "requirements line 6: blinker==1.9.0",
+      "bom-ref": "requirements-L7",
+      "description": "requirements line 7: blinker==1.9.0",
       "externalReferences": [
         {
           "comment": "implicit dist url",
@@ -76,8 +76,8 @@
       "version": "1.9.0"
     },
     {
-      "bom-ref": "requirements-L13",
-      "description": "requirements line 13: cffi==2.1.1",
+      "bom-ref": "requirements-L14",
+      "description": "requirements line 14: cffi==2.1.1",
       "externalReferences": [
         {
           "comment": "implicit dist url",
@@ -91,8 +91,8 @@
       "version": "2.1.1"
     },
     {
-      "bom-ref": "requirements-L7",
-      "description": "requirements line 7: click==8.5.0",
+      "bom-ref": "requirements-L8",
+      "description": "requirements line 8: click==8.5.0",
       "externalReferences": [
         {
           "comment": "implicit dist url",
@@ -121,8 +121,8 @@
       "version": "50.0.2"
     },
     {
-      "bom-ref": "requirements-L8",
-      "description": "requirements line 8: itsdangerous==2.2.0",
+      "bom-ref": "requirements-L9",
+      "description": "requirements line 9: itsdangerous==2.2.0",
       "externalReferences": [
         {
           "comment": "implicit dist url",
@@ -136,8 +136,8 @@
       "version": "2.2.0"
     },
     {
-      "bom-ref": "requirements-L14",
-      "description": "requirements line 14: pycparser==3.12",
+      "bom-ref": "requirements-L15",
+      "description": "requirements line 15: pycparser==3.12",
       "externalReferences": [
         {
           "comment": "implicit dist url",
@@ -149,6 +149,21 @@
       "purl": "pkg:pypi/pycparser@3.12",
       "type": "library",
       "version": "3.12"
+    },
+    {
+      "bom-ref": "requirements-L5",
+      "description": "requirements line 5: truststore==0.10.5",
+      "externalReferences": [
+        {
+          "comment": "implicit dist url",
+          "type": "distribution",
+          "url": "https://pypi.org/simple/truststore/"
+        }
+      ],
+      "name": "truststore",
+      "purl": "pkg:pypi/truststore@0.10.5",
+      "type": "library",
+      "version": "0.10.5"
     },
     {
       "bom-ref": "requirements-L3",
@@ -174,10 +189,13 @@
       "ref": "requirements-L11"
     },
     {
-      "ref": "requirements-L13"
+      "ref": "requirements-L12"
     },
     {
       "ref": "requirements-L14"
+    },
+    {
+      "ref": "requirements-L15"
     },
     {
       "ref": "requirements-L2"
@@ -189,7 +207,7 @@
       "ref": "requirements-L4"
     },
     {
-      "ref": "requirements-L6"
+      "ref": "requirements-L5"
     },
     {
       "ref": "requirements-L7"
@@ -199,32 +217,10 @@
     },
     {
       "ref": "requirements-L9"
-    },
-    {
-      "ref": "root-component"
     }
   ],
   "metadata": {
-    "component": {
-      "bom-ref": "root-component",
-      "description": "Simpele Nederlandstalige carpoolplanner (Flask + SQLite)",
-      "externalReferences": [
-        {
-          "comment": "from pyproject urls: Source",
-          "type": "other",
-          "url": "https://github.com/ProAdmin007/carpool-webapp"
-        }
-      ],
-      "name": "carpool-webapp",
-      "type": "application",
-      "version": "1.0.0"
-    },
-    "properties": [
-      {
-        "name": "cdx:reproducible",
-        "value": "true"
-      }
-    ],
+    "timestamp": "2026-11-09T20:08:52.157910+00:00",
     "tools": {
       "components": [
         {
@@ -274,7 +270,7 @@
           ],
           "name": "cyclonedx-py",
           "type": "application",
-          "version": "8.0.1"
+          "version": "7.6.0"
         },
         {
           "description": "Python library for CycloneDX",
@@ -328,6 +324,7 @@
       ]
     }
   },
+  "serialNumber": "urn:uuid:6621ee75-5d81-45e9-ba98-15e32707ac82",
   "version": 1,
   "$schema": "http://cyclonedx.org/schema/bom-1.6.schema.json",
   "bomFormat": "CycloneDX",

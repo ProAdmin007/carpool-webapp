@@ -3,22 +3,31 @@
 Werkt met de standaard push-servers van de browsers (Google/Chrome, Mozilla, Apple, Microsoft).
 - VAPID (RFC 8292): de server bewijst met een eigen sleutel wie de afzender is.
 - Versleuteling (RFC 8291, 'aes128gcm'): alleen het apparaat van de ontvanger kan de melding lezen.
-Alleen het pakket 'cryptography' is nodig; HTTP gaat via de standaardbibliotheek.
+Nodig: 'cryptography' (versleutelen) en 'truststore' (certificaten controleren zoals het
+besturingssysteem dat doet); HTTP gaat via de standaardbibliotheek.
 """
 import base64
 import json
 import os
+import ssl
 import time
 import urllib.error
 import urllib.request
 from urllib.parse import urlsplit
 
+import truststore
 from cryptography.hazmat.primitives import hashes, hmac, serialization
 from cryptography.hazmat.primitives.asymmetric import ec
 from cryptography.hazmat.primitives.asymmetric.utils import decode_dss_signature
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 
 RECORD_SIZE = 4096
+
+# Certificaten controleren met de certificaatopslag van het besturingssysteem. Python zelf ziet op
+# Windows alleen basiscertificaten die al eens gebruikt zijn; Apple's push-server (root 'COMODO ECC
+# Certification Authority') faalde daardoor met CERTIFICATE_VERIFY_FAILED. Windows haalt een
+# ontbrekend basiscertificaat zelf op; op Linux (Docker) is dit de gewone systeemlijst.
+TLS = truststore.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
 
 
 def b64u(data: bytes) -> str:
@@ -113,7 +122,7 @@ def send(subscription: dict, message: dict, key, contact: str, ttl: int = 12 * 3
         'Content-Type': 'application/octet-stream', 'Content-Encoding': 'aes128gcm',
         'TTL': str(ttl), 'Urgency': 'normal', 'Authorization': vapid_header(endpoint, key, contact)})
     try:
-        with urllib.request.urlopen(req, timeout=timeout) as resp:  # nosec B310
+        with urllib.request.urlopen(req, timeout=timeout, context=TLS) as resp:  # nosec B310
             return resp.status
     except urllib.error.HTTPError as e:
         return e.code

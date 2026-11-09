@@ -187,10 +187,10 @@ Onderaan de planning staat **🔔 Meldingen op je telefoon**. Daar zet je per ap
 Wat je zelf aanpast, krijg je niet nog eens als melding. Elke melding wordt maar één keer gestuurd.
 
 - **Android, Windows, Mac:** werkt in Chrome, Edge en Firefox, ook als de app dicht is.
-- **iPhone/iPad** (iOS 16.4 of nieuwer): zet de app eerst op je beginscherm via Safari → Deel → *Zet op beginscherm*, en zet meldingen daarna aan vanuit die app.
+- **iPhone/iPad** (iOS 16.4 of nieuwer): zet de app eerst op je beginscherm via Safari → Deel → *Zet op beginscherm*, open de app vanaf het beginscherm, log daar één keer in (die app onthoudt je los van Safari) en zet meldingen aan. In Safari zelf toont de planning bovenaan een regel die hiernaar verwijst.
 - **Werkt alleen via https**, dus via de reverse proxy (bijvoorbeeld `https://carpool.example.nl`), niet via `http://…:5000`.
 
-Technisch is dit standaard Web Push: de app stuurt de melding versleuteld naar de push-dienst van de browser (Google, Mozilla, Apple of Microsoft), zonder account of externe dienst. De app maakt bij de eerste keer een eigen sleutel `vapid_private.pem` aan, in Docker op het volume (`/data`). Bewaar die net als `secret_key.txt`: raakt hij kwijt, dan moet iedereen meldingen opnieuw aanzetten. Met `PUSH_CONTACT` kun je een contactadres (`mailto:` of `https://`) meegeven voor de push-diensten.
+Technisch is dit standaard Web Push: de app stuurt de melding versleuteld naar de push-dienst van de browser (Google, Mozilla, Apple of Microsoft), zonder account of externe dienst. De app maakt bij de eerste keer een eigen sleutel `vapid_private.pem` aan, in Docker op het volume (`/data`). Bewaar die net als `secret_key.txt`: raakt hij kwijt, dan moet iedereen meldingen opnieuw aanzetten. Met `PUSH_CONTACT` kun je een contactadres (`mailto:` of `https://`) meegeven voor de push-diensten. Certificaten van de push-diensten worden gecontroleerd met de certificaatopslag van het besturingssysteem (pakket `truststore`); met alleen Python's eigen lijst faalde Apple's push-server op Windows.
 
 ## Feedback
 

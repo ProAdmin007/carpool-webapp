@@ -351,7 +351,14 @@
   var box = document.getElementById('push-prompt');
   var dismissed = false;
   try { dismissed = localStorage.getItem('pushPromptDismissed') === '1'; } catch (e) {}
-  if (!box || dismissed || !('serviceWorker' in navigator) || !('PushManager' in window) || !('Notification' in window)
+  if (!box || dismissed) return;
+  // iPhone/iPad in Safari: meldingen kunnen pas als de app op het beginscherm staat; wijs de weg daarheen.
+  var ios = /iPhone|iPad|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+  var standalone = window.matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
+  if (ios && !standalone && !('PushManager' in window)) {
+    box.querySelector('strong').textContent = 'Meldingen op je iPhone ›';
+    box.querySelector('.muted').textContent = 'zet de app op je beginscherm';
+  } else if (!('serviceWorker' in navigator) || !('PushManager' in window) || !('Notification' in window)
       || Notification.permission !== 'default') return;
   box.hidden = false;
   document.getElementById('push-dismiss').addEventListener('click', function () {
