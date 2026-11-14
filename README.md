@@ -170,7 +170,7 @@ Een dag die al voorbij is en niet is afgerond, telt niet mee. Je kunt hem achter
 
 ## Ritten in je eigen agenda
 
-Onderaan de planning staat **Ritten in je eigen agenda**. Daar vindt iedereen een persoonlijke abonnementslink (`/agenda/<geheime-code>.ics`). Die voeg je één keer toe aan Google Agenda, Outlook of de iPhone-/Mac-agenda. De agenda-app haalt de planning daarna zelf op. De app vraagt om elke 12 uur te verversen. Google ververst meestal één à twee keer per dag.
+Onderaan de planning staat **Ritten in je eigen agenda**. Daar vindt iedereen een persoonlijke abonnementslink (`/agenda/<geheime-code>.ics`). Die voeg je één keer toe aan Google Agenda, Outlook of de iPhone-/Mac-agenda. De agenda-app haalt de planning daarna zelf op. De app vraagt om elke 12 uur te verversen. Google ververst meestal één à twee keer per dag. Onder **Laatst opgehaald** zie je per agenda-app wanneer die de link voor het laatst ophaalde. Google bewaart een kopie per link: dezelfde link opnieuw toevoegen helpt dus niet. Loopt de agenda vast, maak dan een **Nieuwe link** en voeg die toe.
 
 - In de agenda staan de dagen waarop je gaat, als hele-dag-afspraak die je niet als bezet toont. Ritten tot 8 weken vooruit en 60 dagen terug.
 - Wie de link heeft, kan je ritten zien. Lekt hij uit, klik dan op **Nieuwe link maken**. De oude link werkt dan direct niet meer.

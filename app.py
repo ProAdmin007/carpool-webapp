@@ -159,6 +159,14 @@ def init_db():
           added_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
           PRIMARY KEY (ride_date, user_id)
         );
+        -- Wanneer welke agenda-app iemands agendalink voor het laatst ophaalde (ter controle).
+        CREATE TABLE IF NOT EXISTS cal_fetches (
+          user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+          client TEXT NOT NULL,
+          last_at TEXT NOT NULL,
+          count INTEGER NOT NULL DEFAULT 1,
+          PRIMARY KEY (user_id, client)
+        );
         CREATE TABLE IF NOT EXISTS settings (
           key TEXT PRIMARY KEY,
           value TEXT NOT NULL
@@ -1050,6 +1058,26 @@ def calendar_feed(user):
     return '\r\n'.join(ical_fold(line) for line in lines) + '\r\n'
 
 
+CAL_CLIENTS = (  # (stukje uit de User-Agent, naam) - de eerste die past wint
+    ('google', 'Google Agenda'), ('outlook', 'Outlook'), ('microsoft', 'Outlook'), ('exchange', 'Outlook'),
+    ('icsx', 'ICSx⁵'), ('dataaccessd', 'iPhone-agenda'), ('ios/', 'iPhone-agenda'),
+    ('calendaragent', 'Mac-agenda'), ('macos', 'Mac-agenda'), ('thunderbird', 'Thunderbird'),
+    ('mozilla', 'Browser'), ('curl', 'Test (curl)'))
+
+
+def calendar_client():
+    ua = request.headers.get('User-Agent', '').lower()
+    return next((name for key, name in CAL_CLIENTS if key in ua), 'Andere agenda-app')
+
+
+def ago(when, now=None):
+    """'vandaag 08:14', 'gisteren 21:03' of 'za 7 nov 10:00'."""
+    now = now or datetime.now()
+    days = (now.date() - when.date()).days
+    day = 'vandaag' if days == 0 else 'gisteren' if days == 1 else f'{WEEKDAYS[when.weekday()][:2].lower()} {short(when.date())}'
+    return f'{day} {when:%H:%M}'
+
+
 @app.route('/agenda/<token>.ics')
 def calendar_ics(token):
     """Openbare (geheime) link voor agenda-apps; die kunnen niet inloggen."""
@@ -1059,6 +1087,10 @@ def calendar_ics(token):
     if not user:
         abort(404)
     g.user = user
+    db().execute('INSERT INTO cal_fetches(user_id,client,last_at) VALUES (?,?,?) '
+                 'ON CONFLICT(user_id,client) DO UPDATE SET last_at=excluded.last_at, count=count+1',
+                 (user['id'], calendar_client(), datetime.now().isoformat(timespec='seconds')))
+    db().commit()
     resp = app.response_class(calendar_feed(user), mimetype='text/calendar')
     resp.headers['Content-Disposition'] = 'inline; filename="carpool.ics"'
     return resp
@@ -1070,13 +1102,17 @@ def calendar_page():
     renew = request.method == 'POST' and request.form.get('action') == 'renew'
     token = calendar_token(g.user, renew=renew)
     if renew:
+        db().execute('DELETE FROM cal_fetches WHERE user_id=?', (g.user['id'],))   # telt opnieuw voor de nieuwe link
+        db().commit()
         audit('calendar_renew')
         flash('Nieuwe agendalink gemaakt. De oude link werkt niet meer.', 'success')
         return redirect(url_for('calendar_page'))
     https_url = url_for('calendar_ics', token=token, _external=True)
     webcal_url = 'webcal://' + https_url.split('://', 1)[1]
     add_from_web = '/calendar/0/addfromweb?name=Carpool&url=' + quote(https_url, safe='')
-    return render_template('agenda.html', https_url=https_url, webcal_url=webcal_url,
+    fetches = [{'client': r['client'], 'when': ago(datetime.fromisoformat(r['last_at'])), 'count': r['count']}
+               for r in db().execute('SELECT * FROM cal_fetches WHERE user_id=? ORDER BY last_at DESC', (g.user['id'],))]
+    return render_template('agenda.html', https_url=https_url, webcal_url=webcal_url, fetches=fetches,
                            google_url='https://calendar.google.com/calendar/r?cid=' + quote(https_url, safe=''),
                            outlook_url='https://outlook.live.com' + add_from_web,
                            outlook_work_url='https://outlook.office.com' + add_from_web)

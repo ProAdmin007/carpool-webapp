@@ -43,6 +43,29 @@
   <button type="button" class="secondary full" id="copy-cal">Link kopiëren</button>
 </section>
 
+<section class="card cal-card" id="opgehaald">
+  <h2>Laatst opgehaald</h2>
+  {% if fetches %}
+  <ul class="cal-fetches">
+    {% for f in fetches %}<li><strong>{{ f.client }}</strong> <span class="muted">{{ f.when }}</span></li>{% endfor %}
+  </ul>
+  {% else %}
+  <p class="muted">Nog geen agenda-app heeft deze link opgehaald.</p>
+  {% endif %}
+  <p class="muted minor">Je agenda-app bepaalt zelf wanneer hij kijkt; Google vaak maar één à twee keer per dag. Wat de app hierboven ophaalde, is altijd de actuele planning.</p>
+  <details class="google-help">
+    <summary class="linkbtn">Staat je agenda al lang niet goed?</summary>
+    <div class="google-steps">
+      <p>Google bewaart een kopie per link. De agenda verwijderen en <em>dezelfde</em> link opnieuw toevoegen helpt daarom niet: Google gebruikt dan die oude kopie.</p>
+      <ol>
+        <li>Verwijder Carpool in Google Agenda (Instellingen → Carpool → <strong>Afmelden</strong>).</li>
+        <li>Tik hieronder bij <strong>Link gelekt?</strong> op <strong>Nieuwe link maken</strong>.</li>
+        <li>Voeg de nieuwe link toe zoals hierboven. Google haalt een nieuwe link meteen op.</li>
+      </ol>
+    </div>
+  </details>
+</section>
+
 <section class="card cal-card">
   <h2>Wat staat erin?</h2>
   <ul class="cal-list">
@@ -54,8 +77,8 @@
 </section>
 
 <section class="card cal-card">
-  <h2>Link gelekt?</h2>
-  <p>Iedereen met deze link kan jouw ritten zien. Deel hem dus niet. Maak je een nieuwe link, dan werkt de oude niet meer en moet je de agenda opnieuw toevoegen.</p>
+  <h2>Link gelekt? Of agenda vastgelopen?</h2>
+  <p>Iedereen met deze link kan jouw ritten zien. Deel hem dus niet. Maak je een nieuwe link, dan werkt de oude niet meer en moet je de agenda opnieuw toevoegen. Dat helpt ook als Google een oude kopie blijft tonen.</p>
   <form method="post" data-confirm="Nieuwe link maken? De oude link werkt dan niet meer.">
     <input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="action" value="renew">
     <button class="secondary full">Nieuwe link maken</button>

@@ -86,6 +86,33 @@ def test_ongeldige_of_vernieuwde_link():
     assert c.get(old).status_code == 404 and c.get(new).status_code == 200
 
 
+def test_laatst_opgehaald():
+    fresh()
+    anna, _ = login('Anna')
+    assert 'Nog geen agenda-app heeft deze link opgehaald' in text(anna.get('/agenda'))
+    url = feed_url(anna).replace('http://localhost', '')
+    c = A.app.test_client()
+    c.get(url, headers={'User-Agent': 'Google-Calendar-Importer'})
+    c.get(url, headers={'User-Agent': 'Google-Calendar-Importer'})
+    c.get(url, headers={'User-Agent': 'iOS/18.1 (22B83) dataaccessd/1.0'})
+    page = text(anna.get('/agenda'))
+    assert 'Google Agenda' in page and 'iPhone-agenda' in page and 'vandaag' in page
+    with A.app.app_context():
+        assert A.db().execute("SELECT count FROM cal_fetches WHERE client='Google Agenda'").fetchone()[0] == 2
+    bas, _ = login('Bas')
+    assert 'Google Agenda</strong>' not in text(bas.get('/agenda')), 'alleen je eigen link'
+    post(anna, '/agenda', action='renew')
+    assert 'Nog geen agenda-app' in text(anna.get('/agenda')), 'nieuwe link telt opnieuw'
+
+
+def test_ago():
+    from datetime import datetime
+    now = datetime(2026, 11, 14, 12, 0)
+    assert A.ago(datetime(2026, 11, 14, 8, 14), now) == 'vandaag 08:14'
+    assert A.ago(datetime(2026, 11, 13, 21, 3), now) == 'gisteren 21:03'
+    assert A.ago(datetime(2026, 11, 9, 10, 0), now).endswith('10:00')
+
+
 def test_agendapagina_vereist_login():
     fresh()
     assert A.app.test_client().get('/agenda').status_code == 302

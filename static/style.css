@@ -202,3 +202,5 @@ textarea{width:100%;border:1px solid var(--border);border-radius:10px;padding:12
 .audit-meta{font-size:11.5px;color:var(--text-3);margin-top:3px}
 .audit-more{margin:10px 0 8px}
 @media(max-width:700px){.audit-filter{grid-template-columns:1fr 1fr}.audit-filter button{grid-column:1/-1}}
+.cal-fetches{list-style:none;padding:0;margin:0 0 8px;display:grid;gap:4px}
+.cal-fetches li{display:flex;justify-content:space-between;gap:12px;font-size:14px}
