@@ -204,3 +204,16 @@ textarea{width:100%;border:1px solid var(--border);border-radius:10px;padding:12
 @media(max-width:700px){.audit-filter{grid-template-columns:1fr 1fr}.audit-filter button{grid-column:1/-1}}
 .cal-fetches{list-style:none;padding:0;margin:0 0 8px;display:grid;gap:4px}
 .cal-fetches li{display:flex;justify-content:space-between;gap:12px;font-size:14px}
+/* Aanpassen voor een collega */
+.others-edit{margin-top:10px}
+.others-edit summary{list-style:none;cursor:pointer;font-size:12px}
+.others-edit summary::-webkit-details-marker{display:none}
+.others-list{display:grid;gap:8px;margin-top:10px;border:1px solid var(--border);border-radius:12px;padding:10px 12px}
+.others-row{display:flex;align-items:center;gap:8px}
+.others-row form{margin:0}
+.others-name{flex:1;font-size:13px;font-weight:700;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.mini-choice{padding:7px 10px;background:var(--surface);border:1.5px solid var(--border);border-radius:9px;font-size:12px;font-weight:700;color:var(--text)}
+.mini-choice.selected{background:var(--soft);border-color:var(--accent);color:var(--accent-text)}
+.mini-choice.selected.no{background:var(--neutral);border-color:var(--text-3);color:var(--neutral-text)}
+.others-list .minor{margin:2px 0 0}
+.set-by{font-weight:500;color:var(--text-3)}

@@ -143,7 +143,7 @@ def test_collegas_meteen_aanmelden():
     assert 'jij en Anna gaan mee' in text(bas.get('/'))
     with A.app.test_request_context():
         day = next(d for d in A.plan_for(FRI) if d['iso'] == FRI.isoformat())
-    assert day['driver'] in (1, 2) and day['guests'] == {1: 2}
+    assert day['driver'] in (1, 2) and set(day['set_by']) == {1} and day['set_by'][1][0] == 2
     # Anna ziet dat Bas haar heeft aangemeld; Chris krijgt de gewone vraag.
     anna, _ = login('Anna')
     assert 'Bas heeft je aangemeld voor vrijdag' in text(anna.get('/'))
@@ -162,7 +162,7 @@ def test_aangemelde_collega_houdt_de_dag_niet_vast():
     post(bas, f'/extra-day/{FRI}/remove')
     assert extra_rows() == [] and going(FRI) == {}
     with A.app.app_context():
-        assert A.db().execute('SELECT COUNT(*) FROM extra_day_guests').fetchone()[0] == 0
+        assert A.db().execute('SELECT COUNT(*) FROM attendance_set_by').fetchone()[0] == 0
     # Zegt Chris zelf ja, dan blijft de dag staan.
     post(bas, '/extra-day', day=FRI.isoformat(), **{'with': ['3']})
     chris, _ = login('Chris')

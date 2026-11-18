@@ -16,16 +16,24 @@
   <small>Anders telt deze rit niet mee voor de chauffeur. Tik hier om het in te vullen.</small></span>
 </a>
 {% endfor %}
+{% for day in set_for_me %}
+{% set by = day.set_by[me.id][0] %}
+<a class="notice info" href="{{ url_for('index', week=week_of(day.date)) }}#day-{{ day.iso }}">
+  <span class="notice-icon">{{ '＋' if day.responses.get(me.id) == 1 else '✎' }}</span>
+  {% if day.responses.get(me.id) == 1 %}
+  <span><strong>{{ names.get(by, 'Een collega') }} heeft je aangemeld voor {{ day.label|lower }}.</strong><br>
+  <small>{% if day.driver == me.id %}Jij staat gepland als chauffeur. {% endif %}Klopt dat? Tik hier om Ja of Nee te kiezen.</small></span>
+  {% else %}
+  <span><strong>{{ names.get(by, 'Een collega') }} heeft je afgemeld voor {{ day.label|lower }}.</strong><br>
+  <small>Ga je toch? Tik hier om het aan te passen.</small></span>
+  {% endif %}
+</a>
+{% endfor %}
 {% for day in extra_invites %}
 <a class="notice info" href="{{ url_for('index', week=week_of(day.date)) }}#day-{{ day.iso }}">
   <span class="notice-icon">＋</span>
-  {% if me.id in day.guests %}
-  <span><strong>{{ names.get(day.guests[me.id] or day.extra_by, 'Iemand') }} heeft je aangemeld voor {{ day.label|lower }}.</strong><br>
-  <small>{% if day.driver == me.id %}Jij staat gepland als chauffeur. {% endif %}Klopt dat? Tik hier om Ja of Nee te kiezen.</small></span>
-  {% else %}
   <span><strong>{{ names.get(day.extra_by, 'Iemand') }} wil ook op {{ day.label|lower }} carpoolen.</strong><br>
   <small>Ga je mee? Tik hier om het in te vullen.</small></span>
-  {% endif %}
 </a>
 {% endfor %}
 <div class="notice info push-prompt" id="push-prompt" hidden>
@@ -107,9 +115,9 @@
 
 {% macro remove_extra_form(day, week=0) %}
   {#- Verwijderen kan zolang er nog niemand anders meegaat; de beheerder kan het altijd. -#}
-  {#- Wie jij zelf hebt aangemeld en nog niet bevestigde, houdt de dag niet vast. -#}
+  {#- Wie door een ander is aangemeld en dat nog niet zelf bevestigde, houdt de dag niet vast. -#}
   {% set others_going = day.present|rejectattr('id', 'equalto', me.id)|map(attribute='name')|list %}
-  {% set confirmed_others = day.present|rejectattr('id', 'equalto', me.id)|rejectattr('id', 'in', day.guests.keys()|list)|map(attribute='name')|list %}
+  {% set confirmed_others = day.present|rejectattr('id', 'equalto', me.id)|rejectattr('id', 'in', day.set_by.keys()|list)|map(attribute='name')|list %}
   {% if me.is_admin or not confirmed_others %}
   <form method="post" action="{{ url_for('remove_extra_day', ride_date=day.iso) }}" class="remove-extra"
         data-confirm="Weet je zeker dat je de extra dag op {{ day.label|lower }} wilt verwijderen?{% if others_going %} {{ others_going|join(' en ') }} {{ 'gaat' if others_going|length == 1 else 'gaan' }} al mee en {{ 'krijgt' if others_going|length == 1 else 'krijgen' }} dan geen rit.{% endif %}">
@@ -194,6 +202,28 @@
         <button class="primary full">Opslaan</button>
       </form>
 {% endmacro %}
+{% macro others_form(day) %}
+  {#- Collega vergeten in te vullen? Iedereen kan het voor een ander aanpassen; die krijgt een melding. -#}
+  <details class="others-edit">
+    <summary class="linkbtn">Aanpassen voor een collega</summary>
+    <div class="others-list">
+      {% for u in users if u.id != me.id %}
+      {% set r = day.responses.get(u.id) %}
+      <div class="others-row">
+        <span class="others-name">{{ u.name }}</span>
+        {% for val, label in (('1', 'Gaat'), ('0', 'Gaat niet')) %}
+        <form method="post" action="{{ url_for('set_attendance', ride_date=day.iso) }}">
+          <input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="going" value="{{ val }}">
+          <input type="hidden" name="user" value="{{ u.id }}"><input type="hidden" name="week" value="{{ offset }}">
+          <button class="mini-choice {% if r == val|int %}selected{% if val == '0' %} no{% endif %}{% endif %}" aria-label="{{ u.name }}: {{ label|lower }}">{{ label }}</button>
+        </form>
+        {% endfor %}
+      </div>
+      {% endfor %}
+      <p class="muted minor">Je collega krijgt een melding en ziet dat jij het hebt aangepast.</p>
+    </div>
+  </details>
+{% endmacro %}
 <div class="cards">
 {% for day in days %}
   {% if day.done %}
@@ -273,9 +303,10 @@
         <div class="people">{% for u in day.passengers %}<span class="person">{{ u.name }}</span>{% else %}<span class="muted">Niemand, reed alleen</span>{% endfor %}</div>
       {% else %}
         <small>Gaan naar kantoor</small>
-        <div class="people">{% for u in day.present %}<span class="person">{{ u.name }}</span>{% else %}<span class="muted">Nog niemand aangemeld</span>{% endfor %}</div>
+        <div class="people">{% for u in day.present %}<span class="person">{{ u.name }}{% if u.id in day.set_by %}<small class="set-by" title="Ingevuld door {{ names.get(day.set_by[u.id][0], 'een collega') }}"> · door {{ 'jou' if day.set_by[u.id][0] == me.id else names.get(day.set_by[u.id][0], '?') }}</small>{% endif %}</span>{% else %}<span class="muted">Nog niemand aangemeld</span>{% endfor %}</div>
         {% set missing = users|rejectattr('id', 'in', day.responses.keys()|list)|map(attribute='name')|list %}
         {% if missing and not day.past %}<p class="muted minor">Nog niet ingevuld: {{ missing|join(', ') }}</p>{% endif %}
+        {% if not day.past %}{{ others_form(day) }}{% endif %}
       {% endif %}
     </div>
 
